@@ -1,0 +1,27 @@
+model_list:
+  - model_name: gemini
+    litellm_params:
+      model: gemini/gemini-2.5-pro
+      api_key: "AQ.Ab8RN6KYRuyC9ZZvM9_CJsvG0Cw_FeCvUWRRxD9Q5zIxjP4r6A"
+  - model_name: openai
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: "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"
+  - model_name: deepseek
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: "sk-ed430fd7539c4efa8e274c9009297a6d"
+  - model_name: groq
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: "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"
+  - model_name: huggingface
+    litellm_params:
+      model: huggingface/Qwen/Qwen2.5-Coder-32B-Instruct
+      api_key: "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"
+router_settings:
+  routing_strategy: "simple-shuffle"
+  enable_loadbalancing: true
+  num_retries: 3
+general_settings:
+  master_key: "sk-1234"
