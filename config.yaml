@@ -3,11 +3,6 @@ model_list:
     litellm_params:
       model: gemini/gemini-3.1-pro-preview
       api_key: "AQ.Ab8RN6KYRuyC9ZZvM9_CJsvG0Cw_FeCvUWRRxD9Q5zIxjP4r6A"
-  - model_name: openai
-    litellm_params:
-      model: openai/gpt-4o
-      api_key: "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"
-      request_timeout: 40
   - model_name: deepseek
     litellm_params:
       model: deepseek/deepseek-chat
@@ -24,14 +19,9 @@ model_list:
 router_settings:
   routing_strategy: "round-robin"
   enable_loadbalancing: true
-  num_retries: 1
+  num_retries: 0
   request_timeout: 30
   retry_after: 2
-  fallbacks: [
-    {"gemini": ["openai", "deepseek"]},
-    {"openai": ["groq", "huggingface"]},
-    {"deepseek": ["groq"]}
-  ]
 
 general_settings:
   master_key: "sk-1234"
