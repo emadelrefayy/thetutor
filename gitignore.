@@ -1,0 +1,76 @@
+# ============================
+#  ملفات البيئة والأسرار (الأهم)
+# ============================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+
+# ============================
+#  بايثون (Python)
+# ============================
+__pycache__/
+*.py[cod]
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+*.egg
+dist/
+build/
+*.log
+
+# ============================
+#  نود جي إس (Node.js) و React
+# ============================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+.pnpm-debug.log*
+*.tsbuildinfo
+
+# ============================
+#  ملفات البناء (Build)
+# ============================
+build/
+dist/
+.vercel/
+.next/
+out/
+*.min.js
+*.min.css
+
+# ============================
+#  ملفات قاعدة البيانات المحلية
+# ============================
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================
+#  ملفات خاصة بالمحرر (IDE)
+# ============================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================
+#  ملفات مؤقتة
+# ============================
+*.tmp
+*.temp
+*.cache
