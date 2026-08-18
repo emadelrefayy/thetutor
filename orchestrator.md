@@ -1,4 +1,4 @@
-# 🧱 خطة بناء مشروع "The Tutor" (المنصة التعليمية الذكية)
+# 🧱 خطة بناء مشروع "The Tutor" - نسخة مستوحاة من Midark
 
 ---
 
@@ -16,7 +16,7 @@
 **MODEL:** `openai`  
 **المطلوب:**
 - إنشاء ملف `backend/supabase_schema.sql` يحتوي على كود SQL لإنشاء الجداول:  
-  `students`, `subjects`, `lessons`, `progress`, `daily_challenges`.
+  `students`, `parents`, `subjects`, `lessons`, `progress`, `daily_challenges`.
 - كتابة تعليمات في `README.md` عن كيفية تنفيذ الـ SQL في Supabase.
 - عمل `commit` وتحديث الحالة إلى `3`.
 
@@ -29,17 +29,27 @@
   - تشغيل سيرفر على port 8000 مع CORS.
   - Endpoint تجريبي `/api/health` يرد بـ `{"status": "ok"}`.
   - Endpoint `/api/lessons/{id}` يرجع بيانات وهمية للدرس.
-- كتابة `requirements.txt` يحتوي على `fastapi`, `uvicorn`, `python-dotenv`, `supabase`.
+- كتابة `requirements.txt` يحتوي على `fastapi`, `uvicorn`, `python-dotenv`, `supabase`, `google-generativeai`.
 - عمل `commit` وتحديث الحالة إلى `4`.
 
 ---
 
-## المرحلة 4: الفرونت إند (React + TypeScript + Tailwind)
+## المرحلة 4: الفرونت إند (React + TypeScript + Tailwind) - مستوحى من Midark
 **MODEL:** `gemini`  
 **المطلوب:**
 - إنشاء مشروع React بـ TypeScript في مجلد `frontend/`.
-- تثبيت `tailwindcss` و `shadcn/ui`.
-- إنشاء مكونات: `Layout`, `LoginPage`, `Dashboard`, `LessonPage`.
+- تثبيت `tailwindcss`، `shadcn/ui`، `lucide-react` (للأيقونات)، و `framer-motion` (للحركات).
+- **استخدام الأيقونة المنفصلة**:
+  - استخدم ملف `logo.svg` (الموجود في `frontend/public/`) كأيقونة للمشروع.
+  - ضع الأيقونة جنب اسم "The Tutor" في الشريط العلوي.
+  - استخدم نفس الأيقونة كـ `favicon` في تبويب المتصفح.
+- **تصميم مستوحى من موقع Midark**:
+  - **الألوان**: تدرجات أزرق داكن وبنفسجي، مع لمسات ذهبية وبيضاء.
+  - **الكروت**: بطاقات كبيرة مدورة، فيها أيقونة المادة، اسمها، وعدد الدروس، مع تأثير Hover بسيط.
+  - **الخطوط**: استخدام خط `Inter` (من Google Fonts) مع دعم كامل للغة العربية (`Noto Sans Arabic`).
+  - **الوضع المظلم/الفاتح**: إضافة Toggle في الشريط العلوي يغير الألوان كلها.
+  - **ثنائية اللغة**: دعم RTL للعربية و LTR للإنجليزي، مع زر تبديل في الشريط العلوي.
+  - **الهيكل العام**: شريط علوي ثابت (فيه الشعار، اسم المنصة، زر اللغة، وزر الوضع المظلم)، وشبكة بطاقات في المنتصف، وفوتر بسيط في الأسفل.
 - عمل `commit` وتحديث الحالة إلى `5`.
 
 ---
@@ -48,18 +58,22 @@
 **MODEL:** `openai`  
 **المطلوب:**
 - في `frontend/src/api/`، إنشاء `apiClient.ts` يستخدم `axios` للتواصل مع الباك إند.
-- في صفحة الدرس، جلب البيانات الفعلية من `/api/lessons/{id}` وعرضها.
+- في صفحة الدرس، جلب البيانات الفعلية من `/api/lessons/{id}` وعرضها في تصميم Midark.
 - عمل `commit` وتحديث الحالة إلى `6`.
 
 ---
 
-## المرحلة 6: الذكاء الاصطناعي (القصة والتحليل)
+## المرحلة 6: الذكاء الاصطناعي (القصة والتحليل والمساعد)
 **MODEL:** `gemini`  
 **المطلوب:**
 - في `backend/ai_service.py`:
   - دالة `generate_story(topic)` تستخدم Gemini API لتوليد قصة تفاعلية.
   - دالة `analyze_answers(answers)` لتوليد ملخص نقاط القوة والضعف.
-- إضافة Endpoints: `/api/ai/story` و `/api/ai/analyze`.
+  - دالة `chat_with_tutor(question)` للرد على أسئلة الطلاب في شات الذكاء الاصطناعي.
+- إضافة Endpoints:
+  - `/api/ai/story` (توليد القصة).
+  - `/api/ai/analyze` (تحليل الإجابات).
+  - `/api/ai/chat` (شات الـ AI Tutor).
 - عمل `commit` وتحديث الحالة إلى `7`.
 
 ---
