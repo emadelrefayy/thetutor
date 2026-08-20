@@ -1,35 +1,63 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
+import CartoonBackground from '../components/CartoonBackground';
+import InteractiveGame from '../components/InteractiveGame';
 
 const subjects = [
-  { name: 'الرياضيات', icon: '📐', color: 'bg-red-600', link: '/subject/1' },
-  { name: 'اللغة العربية', icon: '📖', color: 'bg-green-600', link: '/subject/2' },
-  { name: 'العلوم', icon: '🔬', color: 'bg-yellow-600', link: '/subject/3' },
-  { name: 'الإنجليزية', icon: '🇬🇧', color: 'bg-purple-600', link: '/subject/4' },
-  { name: 'الكمبيوتر', icon: '💻', color: 'bg-blue-600', link: '/subject/5' },
-  { name: 'الدين', icon: '🕌', color: 'bg-teal-600', link: '/subject/6' },
+  { name: 'اللغة العربية', icon: '📖', color: 'bg-amber-500', link: '/subject/1' },
+  { name: 'الرياضيات (Math)', icon: '📐', color: 'bg-blue-500', link: '/subject/2' },
+  { name: 'العلوم (Science)', icon: '🔬', color: 'bg-emerald-500', link: '/subject/3' },
+  { name: 'اللغة الإنجليزية (Connect)', icon: '🇬🇧', color: 'bg-purple-500', link: '/subject/4' },
+  { name: 'المستوى الرفيع (Connect Plus)', icon: '🌟', color: 'bg-indigo-500', link: '/subject/5' },
+  { name: 'تكنولوجيا المعلومات (ICT)', icon: '💻', color: 'bg-cyan-500', link: '/subject/6' },
+  { name: 'الدراسات الاجتماعية', icon: '🌍', color: 'bg-orange-500', link: '/subject/7' },
+  { name: 'المهارات المهنية', icon: '🛠️', color: 'bg-rose-500', link: '/subject/8' },
+  { name: 'التربية الدينية', icon: '🕌', color: 'bg-teal-500', link: '/subject/9' },
 ];
 
 const Dashboard = () => {
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-[#FFFDF5] relative overflow-hidden font-sans dir-rtl">
+      <CartoonBackground />
       <Navbar />
-      <div className="p-8">
-        <h1 className="text-4xl font-bold text-center text-gray-800 mb-10">📚 المواد الدراسية</h1>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {subjects.map((subject, idx) => (
+
+      <main className="max-w-6xl mx-auto px-6 py-10 relative z-10">
+        <header className="text-center mb-12">
+          <h1 className="text-4xl sm:text-5xl font-black text-amber-800 mb-4">
+            📚 المواد الدراسية - الصف الرابع الابتدائي
+          </h1>
+          <p className="text-lg font-bold text-amber-600">
+            مرحباً بك في منصة The Tutor! اختر المادة وابدأ رحلة التعلم التفاعلية.
+          </p>
+        </header>
+
+        {/* كروت المواد */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+          {subjects.map((sub, idx) => (
             <Link
               key={idx}
-              to={subject.link}
-              className={`${subject.color} p-8 rounded-3xl shadow-xl hover:scale-105 transition-transform duration-300 flex flex-col items-center justify-center h-56 text-white`}
+              to={sub.link}
+              className="bg-white rounded-3xl p-6 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-2 border border-amber-100 flex items-center gap-5 group"
             >
-              <span className="text-7xl mb-4">{subject.icon}</span>
-              <span className="text-2xl font-semibold">{subject.name}</span>
+              <div className={`${sub.color} text-white w-20 h-20 rounded-2xl flex items-center justify-center text-4xl shadow-inner group-hover:scale-110 transition-transform`}>
+                {sub.icon}
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800 group-hover:text-amber-600 transition-colors">
+                  {sub.name}
+                </h3>
+                <span className="text-sm font-bold text-gray-400">استعرض الدروس ➔</span>
+              </div>
             </Link>
           ))}
         </div>
-      </div>
+
+        {/* اللعبة العامة الشاملة */}
+        <section className="mt-12">
+          <InteractiveGame title="التحدي العام الشامل لكل المواد (9 أسئلة)" />
+        </section>
+      </main>
     </div>
   );
 };

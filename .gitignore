@@ -1,1 +1,6 @@
-.aider*
+node_modules/
+build/
+dist/
+.env
+__pycache__/
+*.pyc
