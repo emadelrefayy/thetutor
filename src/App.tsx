@@ -1,17 +1,17 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import AdminDashboard from './Admin';
-import StudentLesson from './StudentLesson';
+import StudentLessonDynamic from './StudentLessonDynamic';
 import ParentDashboard from './ParentDashboard';
 
-// شريط التنقل الخاص بالتطوير للربط بين كافة الشاشات
 const DevNavbar: React.FC = () => {
   const location = useLocation();
 
   const navLinks = [
     { path: '/', label: '🏠 الرئيسية' },
     { path: '/admin', label: '🛠️ السوبر أدمن' },
-    { path: '/student/lesson', label: '🎓 واجهة الطالب والدرس' },
+    { path: '/student/lesson/1', label: '🎓 معاينة درس 1' },
+    { path: '/student/lesson/2', label: '🎓 معاينة درس 2' },
     { path: '/parent', label: '👨‍👩‍👧‍👦 لوحة ولي الأمر' },
   ];
 
@@ -49,7 +49,7 @@ const Home: React.FC = () => (
       </div>
       <h1 className="text-2xl font-black text-slate-100">منصة The Tutor التعليمية</h1>
       <p className="text-xs text-slate-400 leading-relaxed">
-        أهلاً بك في بيئة التطوير. يمكنك التجول بحرية بين كل الواجهات من الشريط العلوي أو الخيارات التالية:
+        نظام المناهج والدروس الديناميكي الشامل
       </p>
 
       <div className="space-y-2.5 pt-2">
@@ -60,10 +60,10 @@ const Home: React.FC = () => (
           🛠️ الانتقال إلى لوحة السوبر أدمن
         </Link>
         <Link
-          to="/student/lesson"
+          to="/student/lesson/1"
           className="block w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-all text-center shadow-lg"
         >
-          🎓 معاينة صفحة الطالب والدرس التفاعلي
+          🎓 تجربة عرض الدرس الديناميكي (Lesson #1)
         </Link>
         <Link
           to="/parent"
@@ -83,7 +83,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/student/lesson" element={<StudentLesson />} />
+        <Route path="/student/lesson/:lessonId" element={<StudentLessonDynamic />} />
         <Route path="/parent" element={<ParentDashboard />} />
       </Routes>
     </Router>
