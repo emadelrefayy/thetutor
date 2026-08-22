@@ -1,91 +1,65 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import AdminDashboard from './Admin';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+
+// استدعاء جميع الصفحات والمكونات الموجودة في المشروع
+import CurriculumCatalog from './CurriculumCatalog';
+import StudentCatalog from './StudentCatalog';
+import AdminPanel from './AdminPanel';
 import StudentLessonDynamic from './StudentLessonDynamic';
-import ParentDashboard from './ParentDashboard';
 
-const DevNavbar: React.FC = () => {
-  const location = useLocation();
-
-  const navLinks = [
-    { path: '/', label: '🏠 الرئيسية' },
-    { path: '/admin', label: '🛠️ السوبر أدمن' },
-    { path: '/student/lesson/1', label: '🎓 معاينة درس 1' },
-    { path: '/student/lesson/2', label: '🎓 معاينة درس 2' },
-    { path: '/parent', label: '👨‍👩‍👧‍👦 لوحة ولي الأمر' },
-  ];
-
-  return (
-    <nav className="bg-slate-950 border-b border-amber-500/30 px-4 py-2.5 dir-rtl flex items-center justify-between overflow-x-auto">
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-black text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md whitespace-nowrap">
-          DEV MODE ⚡
-        </span>
-      </div>
-      <div className="flex items-center gap-2 sm:gap-4 text-xs font-bold whitespace-nowrap">
-        {navLinks.map((link) => (
-          <Link
-            key={link.path}
-            to={link.path}
-            className={`px-3 py-1.5 rounded-lg transition-all ${
-              location.pathname === link.path
-                ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            {link.label}
-          </Link>
-        ))}
-      </div>
-    </nav>
-  );
-};
-
-const Home: React.FC = () => (
-  <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col items-center justify-center p-6 text-center font-sans dir-rtl">
-    <div className="bg-slate-800 p-8 rounded-3xl shadow-xl border border-slate-700 max-w-md w-full space-y-5">
-      <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center text-2xl mx-auto">
-        🎓
-      </div>
-      <h1 className="text-2xl font-black text-slate-100">منصة The Tutor التعليمية</h1>
-      <p className="text-xs text-slate-400 leading-relaxed">
-        نظام المناهج والدروس الديناميكي الشامل
-      </p>
-
-      <div className="space-y-2.5 pt-2">
-        <Link
-          to="/admin"
-          className="block w-full py-3 bg-slate-900 hover:bg-slate-950 border border-slate-700 text-amber-400 font-bold rounded-xl text-xs transition-all text-center"
-        >
-          🛠️ الانتقال إلى لوحة السوبر أدمن
-        </Link>
-        <Link
-          to="/student/lesson/1"
-          className="block w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-xl text-xs transition-all text-center shadow-lg"
-        >
-          🎓 تجربة عرض الدرس الديناميكي (Lesson #1)
-        </Link>
-        <Link
-          to="/parent"
-          className="block w-full py-3 bg-slate-900 hover:bg-slate-950 border border-slate-700 text-slate-200 font-bold rounded-xl text-xs transition-all text-center"
-        >
-          👨‍👩‍👧‍👦 معاينة لوحة ولي الأمر
-        </Link>
-      </div>
-    </div>
-  </div>
-);
+import AdminDashboard from './pages/AdminDashboard';
+import ParentDashboard from './pages/ParentDashboard';
+import StudentTeacherDashboard from './pages/StudentTeacherDashboard';
+import StudySpace from './pages/StudySpace';
+import LessonPage from './pages/LessonPage';
+import SubjectPage from './pages/SubjectPage';
+import NotFound from './pages/NotFound';
 
 const App: React.FC = () => {
   return (
     <Router>
-      <DevNavbar />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/student/lesson/:lessonId" element={<StudentLessonDynamic />} />
-        <Route path="/parent" element={<ParentDashboard />} />
-      </Routes>
+      <div className="min-h-screen bg-slate-900 text-white font-sans">
+        {/* شريط التحكم الشامل للمطور والسوبر أدمن */}
+        <header className="bg-slate-800 border-b border-slate-700 p-3 sticky top-0 z-50 shadow-lg">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center space-x-2 space-x-reverse">
+              <span className="bg-amber-500 text-slate-900 font-black px-2 py-1 rounded text-xs">DEV SUPER-ADMIN</span>
+              <h1 className="font-bold text-lg text-amber-400">thetutor Platform</h1>
+            </div>
+            
+            {/* خريطة الوصول السريع لكافة صفحات ومكونات الموقع */}
+            <nav className="flex flex-wrap gap-2 text-xs font-semibold">
+              <Link to="/" className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-slate-200 transition">📚 الفهرس الرئيسي</Link>
+              <Link to="/student-catalog" className="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-slate-200 transition">🎓 فهرس الطلاب</Link>
+              <Link to="/admin-panel" className="bg-amber-600 hover:bg-amber-500 px-3 py-1.5 rounded text-white transition">🛠️ لوحة التحكم (Panel)</Link>
+              <Link to="/admin-dashboard" className="bg-amber-700 hover:bg-amber-600 px-3 py-1.5 rounded text-white transition">📊 أدمن المناهج (Dashboard)</Link>
+              <Link to="/parent" className="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-white transition">👨‍👩‍👦 ولي الأمر</Link>
+              <Link to="/teacher-student" className="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-white transition">👨‍🏫 المدرس والطلاب</Link>
+              <Link to="/study-space" className="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded text-white transition">✏️ مساحة الدراسة</Link>
+              <Link to="/lesson/1" className="bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded text-white transition">🎬 عرض درس تجريبي</Link>
+            </nav>
+          </div>
+        </header>
+
+        {/* شبكة التوجيه الحقيقية لجميع صفحات المنصة */}
+        <main className="p-4 max-w-7xl mx-auto">
+          <Routes>
+            <Route path="/" element={<CurriculumCatalog />} />
+            <Route path="/catalog" element={<CurriculumCatalog />} />
+            <Route path="/student-catalog" element={<StudentCatalog />} />
+            <Route path="/admin-panel" element={<AdminPanel />} />
+            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/admin-dashboard" element={<AdminDashboard />} />
+            <Route path="/parent" element={<ParentDashboard />} />
+            <Route path="/teacher-student" element={<StudentTeacherDashboard />} />
+            <Route path="/study-space" element={<StudySpace />} />
+            <Route path="/lesson/:id" element={<StudentLessonDynamic />} />
+            <Route path="/lesson-page" element={<LessonPage />} />
+            <Route path="/subject/:id" element={<SubjectPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+      </div>
     </Router>
   );
 };

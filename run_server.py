@@ -15,9 +15,14 @@ class SPAHandler(http.server.SimpleHTTPRequestHandler):
             self.path = "/index.html"
         return super().do_GET()
 
-class ReusableTCPServer(socketserver.TCPServer):
-    allow_reuse_address = True
+socketserver.TCPServer.allow_reuse_address = True
 
-with ReusableTCPServer(("", PORT), SPAHandler) as httpd:
-    print(f"🚀 SPA Server running securely on http://127.0.0.1:{PORT}")
-    httpd.serve_forever()
+try:
+    with socketserver.TCPServer(("", PORT), SPAHandler) as httpd:
+        print(f"🚀 SPA Server running securely on http://127.0.0.1:{PORT}")
+        httpd.serve_forever()
+except OSError:
+    PORT = 3001
+    with socketserver.TCPServer(("", PORT), SPAHandler) as httpd:
+        print(f"🚀 Fallback: SPA Server running on http://127.0.0.1:{PORT}")
+        httpd.serve_forever()
