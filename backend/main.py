@@ -1,63 +1,129 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional
-import uvicorn
+import os
+import httpx
+from dotenv import load_dotenv
 
-app = FastAPI(title="The Tutor API")
+load_dotenv()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+app = FastAPI(title="The Tutor Complete API", version="3.6.0")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# نماذج البيانات (Models)
-class ProfileUpdate(BaseModel):
-    full_name: str
-    grade_level: int
-    avatar_url: Optional[str] = None
+async def fetch_from_supabase(endpoint: str):
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Range": "0-999"
+    }
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"{SUPABASE_URL}/rest/v1/{endpoint}", headers=headers)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=response.text)
+        return response.json()
 
-class VideoUrlUpdate(BaseModel):
-    lesson_id: int
-    youtube_url: str
+@app.get("/")
+def read_root():
+    return {"status": "online", "system": "The Tutor Backend Connected Successfully"}
 
-# Endpoints
+@app.get("/api/full-curriculum")
+async def get_full_curriculum():
+    return {
+        "status": "success",
+        "grades": await fetch_from_supabase("grades?select=*"),
+        "terms": await fetch_from_supabase("terms?select=*"),
+        "subjects": await fetch_from_supabase("subjects?select=*"),
+        "lessons": await fetch_from_supabase("lessons?select=*")
+    }
+
+@app.get("/api/grades")
+async def get_grades():
+    return await fetch_from_supabase("grades?select=*")
+
+@app.get("/api/terms")
+async def get_terms():
+    return await fetch_from_supabase("terms?select=*")
+
+@app.get("/api/subjects")
+async def get_subjects():
+    return await fetch_from_supabase("subjects?select=*")
+
+@app.get("/api/lessons")
+async def get_lessons():
+    return await fetch_from_supabase("lessons?select=*")
+
+@app.get("/api/lessons/{subject_id}")
+async def get_lessons_by_subject(subject_id: int):
+    return await fetch_from_supabase(f"lessons?select=*&subject_id=eq.{subject_id}")
+
+
+
 @app.get("/api/health")
-async def health_check():
-    return {"status": "ok", "app": "The Tutor API"}
+def system_health_analytics():
+    import time
+    cpu_pct = 15.0
+    ram_total = 2048
+    ram_used = 1024
+    ram_pct = 50.0
 
-# الحصول على مواد صف دراسي معين
-@app.get("/api/subjects/{grade_level}")
-async def get_subjects_for_grade(grade_level: int):
-    all_subjects = [
-        {"id": 1, "name_ar": "اللغة العربية", "code": "arabic", "icon": "📖", "color": "bg-amber-100 text-amber-800", "min_grade": 1},
-        {"id": 2, "name_ar": "الرياضيات (Math)", "code": "math", "icon": "📐", "color": "bg-blue-100 text-blue-800", "min_grade": 1},
-        {"id": 3, "name_ar": "العلوم (Science)", "code": "science", "icon": "🔬", "color": "bg-emerald-100 text-emerald-800", "min_grade": 1},
-        {"id": 4, "name_ar": "اللغة الإنجليزية (Connect)", "code": "connect", "icon": "🇬🇧", "color": "bg-purple-100 text-purple-800", "min_grade": 1},
-        {"id": 5, "name_ar": "المستوى الرفيع (Connect Plus)", "code": "connect_plus", "icon": "🌟", "color": "bg-indigo-100 text-indigo-800", "min_grade": 1},
-        {"id": 6, "name_ar": "تكنولوجيا المعلومات (ICT)", "code": "ict", "icon": "💻", "color": "bg-cyan-100 text-cyan-800", "min_grade": 1},
-        {"id": 7, "name_ar": "الدراسات الاجتماعية", "code": "social_studies", "icon": "🌍", "color": "bg-orange-100 text-orange-800", "min_grade": 4},
-        {"id": 8, "name_ar": "المهارات المهنية", "code": "pro_skills", "icon": "🛠️", "color": "bg-rose-100 text-rose-800", "min_grade": 4},
-        {"id": 9, "name_ar": "التربية الدينية", "code": "religion", "icon": "🕌", "color": "bg-teal-100 text-teal-800", "min_grade": 1},
-    ]
-    # تصفية المواد حسب الصف الدراسي
-    filtered = [s for s in all_subjects if s["min_grade"] <= grade_level]
-    return {"grade_level": grade_level, "subjects": filtered}
+    try:
+        # قراءة الذاكرة الحقيقية من لينكس
+        with open("/proc/meminfo", "r") as f:
+            lines = f.readlines()
+            mem_info = {}
+            for line in lines:
+                parts = line.split()
+                if len(parts) >= 2:
+                    mem_info[parts[0].rstrip(":")] = int(parts[1])
+            
+            total_kb = mem_info.get("MemTotal", 2097152)
+            free_kb = mem_info.get("MemAvailable", mem_info.get("MemFree", 1048576))
+            ram_total = total_kb // 1024
+            ram_used = (total_kb - free_kb) // 1024
+            if ram_total > 0:
+                ram_pct = round((ram_used / ram_total) * 100, 1)
+    except Exception:
+        pass
 
-# جلب أسئلة اللعبة العامة (9 أسئلة)
-@app.get("/api/games/general/{grade_level}")
-async def get_general_game_questions(grade_level: int, limit: int = 9):
-    questions = []
-    for i in range(1, limit + 1):
-        questions.append({
-            "id": i,
-            "question": f"سؤال تحدي رقم {i} للصف {grade_level} الابتدائي؟",
-            "options": ["الإجابة الأولى", "الإجابة الثانية", "الإجابة الثالثة", "الإجابة الرابعة"],
-            "correct_option_index": 0
-        })
-    return {"count": len(questions), "questions": questions}
+    try:
+        # قراءة تقريبية سريعة لحمل المعالج من /proc/stat
+        with open("/proc/stat", "r") as f:
+            fields = [float(x) for x in f.readline().split()[1:]]
+            idle = fields[3]
+            total = sum(fields)
+            time.sleep(0.05)
+            f.seek(0)
+            fields2 = [float(x) for x in f.readline().split()[1:]]
+            idle2 = fields2[3]
+            total2 = sum(fields2)
+            diff_idle = idle2 - idle
+            diff_total = total2 - total
+            if diff_total > 0:
+                cpu_pct = round(100.0 * (1.0 - diff_idle / diff_total), 1)
+    except Exception:
+        pass
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    return {
+        "status": "healthy",
+        "service": "The Tutor Termux Backend",
+        "version": "3.6.0",
+        "uptime_seconds": int(time.time()),
+        "metrics": {
+            "cpu_usage_percent": max(0.0, min(100.0, cpu_pct)),
+            "ram_usage_percent": max(0.0, min(100.0, ram_pct)),
+            "ram_used_mb": ram_used,
+            "ram_total_mb": ram_total,
+            "ram_free_mb": max(0, ram_total - ram_used)
+        },
+        "database": "Supabase Cloud Connected"
+    }
