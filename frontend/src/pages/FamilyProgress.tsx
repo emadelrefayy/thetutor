@@ -1,5 +1,5 @@
 import React from 'react';
-import ParentDashboard from './ParentDashboard';
+import { ParentDashboard } from './ParentDashboard';
 
 const FamilyProgress: React.FC = () => {
   return (

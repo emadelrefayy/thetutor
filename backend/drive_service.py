@@ -1,25 +1,18 @@
-import json
+import os
+from dotenv import load_dotenv
 
-def upload_file_to_drive(file_name: str, file_bytes: bytes) -> dict:
-    """
-    دالة ربط API الخاصة بـ Google Drive
-    تتلقى ملف الواجب وترفعه للمجلد المخصص للـ Tutor وتُعيد رابط المعاينة.
-    """
-    # معرف مجلد التخزين المخصص للمنصة
-    DRIVE_FOLDER_ID = "thetutor_student_uploads"
-    
-    # محاكاة الاستجابة من Google Drive API
-    mock_file_id = f"drive_file_{hash(file_name)}"
-    web_view_link = f"https://drive.google.com/file/d/{mock_file_id}/view"
+load_dotenv()
 
-    return {
-        "status": "success",
-        "file_id": mock_file_id,
-        "file_name": file_name,
-        "drive_url": web_view_link
-    }
+class DriveService:
+    def __init__(self):
+        self.api_key = os.getenv("GOOGLE_DRIVE_API_KEY", "")
 
-if __name__ == "__main__":
-    res = upload_file_to_drive("arabic_homework.pdf", b"mock data")
-    print("✅ تم اختبار ربط Google Drive API بنجاح:")
-    print(json.dumps(res, ensure_ascii=False, indent=2))
+    def get_file_stream_url(self, file_id: str) -> str:
+        """
+        توليد رابط مباشر لاستعراض الملفات التعليمية
+        """
+        if not file_id:
+            return ""
+        return f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={self.api_key}"
+
+drive_service = DriveService()

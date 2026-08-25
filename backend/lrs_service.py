@@ -1,51 +1,31 @@
-import json
-from datetime import datetime
+import os
+import httpx
+from dotenv import load_dotenv
 
-class LRSClient:
+load_dotenv()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://xsfjlzneykogdltuiwno.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+
+async def log_learning_statement(user_id: str, verb: str, object_id: str, payload: dict = None):
     """
-    خدمة تتبع التعلم المتقدمة LRS وفق معيار xAPI (Tin Can API)
-    تُسجل الأنشطة بصيغة: Actor (الطالب) - Verb (التفاعل) - Object (الدرس/اللعبة)
+    تسجيل بيان التعلم (xAPI Statement) لتتبع أداء الطالب
     """
-    def __init__(self, endpoint: str = "https://lrs.thetutor.eg/xapi/", key: str = "tutor_key"):
-        self.endpoint = endpoint
-        self.key = key
-
-    def send_statement(self, student_name: str, student_email: str, verb: str, activity_name: str, score: int = None) -> dict:
-        statement = {
-            "actor": {
-                "name": student_name,
-                "mbox": f"mailto:{student_email}",
-                "objectType": "Agent"
-            },
-            "verb": {
-                "id": f"http://adlnet.gov/expapi/verbs/{verb}",
-                "display": {"ar-EG": verb}
-            },
-            "object": {
-                "id": f"http://thetutor.eg/activities/{activity_name.replace(' ', '_')}",
-                "definition": {
-                    "name": {"ar-EG": activity_name}
-                },
-                "objectType": "Activity"
-            },
-            "timestamp": datetime.utcnow().isoformat() + "Z"
-        }
-
-        if score is not None:
-            statement["result"] = {
-                "score": {"raw": score, "min": 0, "max": 100},
-                "completion": True
-            }
-
-        # محاكاة إرسال الـ Statement إلى LRS Server
-        return {
-            "status": "stored",
-            "statement_id": f"xapi-uuid-{hash(datetime.utcnow().isoformat())}",
-            "statement": statement
-        }
-
-if __name__ == "__main__":
-    lrs = LRSClient()
-    res = lrs.send_statement("أحمد علي", "ahmed@thetutor.eg", "completed", "اختبار الدرس الأول علوم", score=90)
-    print("✅ تم اختبار إرسال بيان xAPI إلى LRS بنجاح:")
-    print(json.dumps(res, ensure_ascii=False, indent=2))
+    url = f"{SUPABASE_URL}/rest/v1/learning_analytics"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+    }
+    
+    data = {
+        "user_id": user_id,
+        "verb": verb,
+        "object_id": object_id,
+        "metadata": payload or {}
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, headers=headers, json=data)
+        return response.status_code in [200, 201]

@@ -1,92 +1,64 @@
-import React from 'react';
-import { Users, Award, BookOpen, CheckCircle, TrendingUp, Star } from 'lucide-react';
+import React, { useState } from 'react';
 
-export default function ParentDashboard() {
+export const ParentDashboard: React.FC = () => {
+  const [inviteCode, setInviteCode] = useState('');
+
   return (
-    <div className="space-y-6 dir-rtl text-right">
-      {/* هيدر الصفحة */}
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl">
+    <div className="space-y-6 dir-rtl text-slate-100 pb-10" dir="rtl">
+      {/* الترويسة الرئيسية */}
+      <div className="space-y-1">
+        <h1 className="text-2xl font-black text-amber-400 flex items-center gap-2">
+          <span>👨‍👩‍👧‍👦</span> لوحة تحكم ولي الأمر
+        </h1>
+        <p className="text-xs text-slate-400">
+          متابعة المستوى الأكاديمي والدروس المخصصة للسنة الدراسية لأبنائك.
+        </p>
+      </div>
+
+      <hr className="border-slate-800" />
+
+      {/* كارت ربط ابن جديد - الداكن الكحلي */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20">
-            <Users className="w-6 h-6 text-amber-400" />
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-lg">
+            🔑
           </div>
-          <div>
-            <h1 className="text-xl font-black text-slate-100">لوحة متابعة ولي الأمر 👨‍👩‍👧</h1>
-            <p className="text-xs text-slate-400 mt-1">تقرير تفصيلي بمستوى الأبناء ونسبة إنجاز الدروس والواجبات</p>
-          </div>
+          <h2 className="text-lg font-bold text-slate-100">ربط ابن جديد بحسابك</h2>
+        </div>
+
+        <p className="text-xs text-slate-300 leading-relaxed">
+          أدخل رمز الدعوة المكون من 6 أرقام وحروف الذي حصلت عليه من إدارة المدرسة/الأدمن:
+        </p>
+
+        <div className="space-y-3">
+          <input 
+            type="text" 
+            placeholder="أدخل رمز الدعوة (مثال: X1Z9K2)"
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-amber-400 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition-all text-center tracking-widest font-mono"
+          />
+
+          <button className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 text-sm">
+            <span>➕</span> تأكيد الربط
+          </button>
         </div>
       </div>
 
-      {/* كارت بطاقة الابن */}
-      <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl space-y-6">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-amber-500/20 border-2 border-amber-400/40 rounded-2xl flex items-center justify-center text-2xl font-bold">
-              👦
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-slate-100">أحمد محمد</h2>
-              <p className="text-xs text-slate-400">الصف الأول الابتدائي (لغات - تجريبي)</p>
-            </div>
+      {/* كارت الأبناء المربوطين - الداكن الكحلي */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            👥
           </div>
-          <span className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 font-black px-4 py-1.5 rounded-full text-xs">
-            مستوى ممتاز (92%) 🌟
-          </span>
-        </div>
-
-        {/* شبكة الإحصائيات والأرقام */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-1">
-            <div className="flex items-center gap-2 text-slate-400 text-xs font-bold">
-              <BookOpen className="w-4 h-4 text-amber-400" />
-              <span>الدروس المكتملة</span>
-            </div>
-            <p className="text-xl font-black text-slate-100">18 / 24</p>
-          </div>
-
-          <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-1">
-            <div className="flex items-center gap-2 text-slate-400 text-xs font-bold">
-              <Award className="w-4 h-4 text-amber-400" />
-              <span>مجموع النقاط</span>
-            </div>
-            <p className="text-xl font-black text-slate-100">1,250 نقطة</p>
-          </div>
-
-          <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-1">
-            <div className="flex items-center gap-2 text-slate-400 text-xs font-bold">
-              <CheckCircle className="w-4 h-4 text-amber-400" />
-              <span>الأنشطة المكتملة</span>
-            </div>
-            <p className="text-xl font-black text-slate-100">32 نشاط</p>
-          </div>
-
-          <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-1">
-            <div className="flex items-center gap-2 text-slate-400 text-xs font-bold">
-              <TrendingUp className="w-4 h-4 text-amber-400" />
-              <span>المعدل الأسبوعي</span>
-            </div>
-            <p className="text-xl font-black text-emerald-400">+15% ارتفاء</p>
-          </div>
-        </div>
-
-        {/* التحديثات والتحديات الأخيرة */}
-        <div className="space-y-3 pt-2">
-          <h3 className="text-xs font-bold text-slate-400 flex items-center gap-2">
-            <Star className="w-4 h-4 text-amber-400" />
-            أحدث الدرجات والتحديات
-          </h3>
-          <div className="space-y-2">
-            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex justify-between items-center text-xs">
-              <span className="text-slate-200 font-bold">Connect Plus 1 - Unit 1 Quiz</span>
-              <span className="text-emerald-400 font-bold">10 / 10 (ممتاز)</span>
-            </div>
-            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl flex justify-between items-center text-xs">
-              <span className="text-slate-200 font-bold">Mathematics 1 - Numbers 1 to 5</span>
-              <span className="text-emerald-400 font-bold">9 / 10 (جيد جداً)</span>
-            </div>
+          <div>
+            <p className="text-xs text-slate-400">الأبناء المربوطين</p>
+            <h3 className="text-lg font-black text-slate-100">1 طالب</h3>
           </div>
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default ParentDashboard;
