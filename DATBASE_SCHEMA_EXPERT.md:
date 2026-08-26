@@ -1,0 +1,122 @@
+وصف قاعده البيانات 
+​📚 The Tutor Platform — Complete Database Schema & Architecture Guide
+​ملاحظة: هذه الوثيقة تمثل المرجع النهائي والشامل لهيكلية قاعدة البيانات (Supabase PostgreSQL Schema) لمنصة "The Tutor"، وتوضح تفاصيل الجداول، أنواع البيانات، القيم الافتراضية، والعلاقات بينها بدقة متناهية.
+​🗺️ 1. الخريطة الهيكلية والعلاقات (Relationships Hierarchy)
+​grades (المراحل الدراسية)
+└── terms (الفصول الدراسية) (grade_id \rightarrow grades.id)
+└── subjects (المواد الدراسية) (term_id \rightarrow terms.id)
+└── lessons (الدروس) (subject_id \rightarrow subjects.id)
+├── games (الألعاب) (lesson_id \rightarrow lessons.id)
+├── quizzes (الأسئلة والاختبارات) (lesson_id \rightarrow lessons.id)
+└── student_progress (متابعة تقدم الطلاب) (lesson_id \rightarrow lessons.id)
+​profiles (الملفات الشخصية للمستخدمين)
+└── مرتبط بـ children (الأبناء/الطلاب) (profile_id أو parent_id \rightarrow profiles.id)
+​tenants (المؤسسات/المستأجرين): نظام مستقل لإدارة النطاقات والخطط (Multi-tenancy).
+​🗂️ 2. تفاصيل الجداول والأعمدة بحذافيرها
+​1. جدول grades (المراحل الدراسية)
+​الوصف: يحمل المراحل الأساسية (مثل الصف الأول الابتدائي حتى السادس الابتدائي).
+​الأعمدة:
+​id (bigint, Not Null): المعرف الأساسي.
+​title (text, Not Null): اسم المرحلة بالعربية (مثل "الصف الأول الابتدائي").
+​level_code (integer, Default: 1): كود رقمي للمستوى.
+​code (text, Not Null): الرمز التعريفي الفريد (Slug).
+​created_at (timestamp with time zone, Default: timezone('utc', now())).
+​2. جدول terms (الفصول الدراسية)
+​الوصف: الفصول الدراسية التابعة لكل مرحلة (الترم الأول / الترم الثاني).
+​الأعمدة:
+​id (bigint, Not Null): المعرف الأساسي (مثل 101, 102).
+​grade_id (bigint, Nullable): مفتاح أجنبي يربط الترم بالمرحلة (grades.id).
+​title (text, Not Null): اسم الترم.
+​code (text, Not Null): الرمز التعريفي.
+​created_at (timestamp with time zone).
+​3. جدول subjects (المواد الدراسية)
+​الوصف: المواد الدراسية المرتبطة بكل ترم.
+​الأعمدة:
+​id (bigint, Not Null): كود المادة المكون من 4 أرقام (مثل 1011).
+​term_id (bigint, Nullable): مفتاح أجنبي يربط المادة بالترم (terms.id).
+​title (text, Not Null): اسم المادة (مثل Connect 1, اللغة العربية).
+​code (text, Not Null): كود النظام للمادة (مثل english_t1).
+​icon_name (text, Default: '📚'): أيقونة المادة التعبيرية.
+​color_theme (text, Default: 'blue'): الثيم اللوني الخاص بالمادة.
+​created_at (timestamp with time zone).
+​4. جدول lessons (الدروس)
+​الوصف: محتوى الوحدات والدروس التفصيلية التابعة لكل مادة.
+​الأعمدة:
+​id (bigint, Not Null, Auto-increment): معرف الدرس الفريد.
+​subject_id (bigint, Nullable): مفتاح أجنبي يربط الدرس بالمادة (subjects.id).
+​title (text, Not Null): عنوان الدرس.
+​unit_number (integer, Default: 1): رقم الوحدة.
+​lesson_number (integer, Default: 1): رقم الدرس داخل الوحدة.
+​content_summary (text, Default: ''): ملخص وشرح الدرس (يدعم Markdown و الذكاء الاصطناعي).
+​video_url (text, Default: ''): رابط الفيديو التعليمي.
+​infographic_url (text, Default: ''): رابط الصورة التوضيحية أو الإنفوجرافيك.
+​game_url (text, Default: ''): رابط اللعبة التفاعلية الخاصة بالدرس.
+​created_at (timestamp with time zone).
+​5. جدول quizzes (الأسئلة والتقييمات)
+​الوصف: بنك الأسئلة والاختبارات القصيرة المرتبطة بالدروس.
+​الأعمدة:
+​id (bigint, Not Null): معرف السؤال.
+​lesson_id (bigint, Nullable): مفتاح أجنبي يربط السؤال بالدرس (lessons.id).
+​question (text, NotNull): نص السؤال.
+​options (jsonb, NotNull): خيارات الإجابة، مستوى الصعوبة، والشرح بصيغة JSON مرنة.
+​correct_option (integer, NotNull): رقم الإجابة الصحيحة (مؤشر يبدأ من 0).
+​created_at (timestamp with time zone).
+​6. جدول games (الألعاب التعليمية)
+​الوصف: الألعاب والتطبيقات التفاعلية المخصصة لكل درس.
+​الأعمدة:
+​id (bigint, Not Null): معرف اللعبة.
+​lesson_id (bigint, Nullable): مفتاح أجنبي للدرس المرتبط (lessons.id).
+​game_type (character varying, NotNull): نوع اللعبة (مثل مطابقة، تجميع، إلخ).
+​title (character varying, Nullable): عنوان اللعبة.
+​game_data (jsonb, NotNull): بي البيانات والإعدادات البرمجية للعبة بصيغة JSON.
+​created_at (timestamp with time zone).
+​7. جدول profiles (الملفات الشخصية)
+​الوصف: بيانات المستخدمين المسجلين (أولياء أمور، معلمين، أو طلاب).
+​الأعمدة:
+​id (uuid, NotNull): معرف المستخدم (مطابق لجدول auth.users في Supabase).
+​name (text, NotNull): اسم المستخدم.
+​role (text, NotNull): دور المستخدم (مثل parent, student, teacher).
+​grade_id (integer, Nullable): المرحلة الدراسية للمستخدم إن وجد.
+​invitation_code (text, Nullable): كود الدعوة الخاص.
+​is_code_used (boolean, Default: false): حالة استخدام كود الدعوة.
+​created_at (timestamp with time zone).
+​8. جدول children (بيانات الأبناء/الطلاب)
+​الوصف: إدارة حسابات الأبناء المرتبطين بولي الأمر.
+​الأعمدة:
+​id (bigint, NotNull, Auto-increment): معرف الابن/الطالب.
+​parent_id (uuid, Nullable): معرف ولي الأمر (profiles.id).
+​profile_id (uuid, Nullable): ربط اختياري مع حساب المستخدم.
+​name (character varying, NotNull): اسم الطفل.
+​grade (character varying, NotNull): الصف الدراسي.
+​points (integer, Default: 0): النقاط والمكافآت التي جمعها الطالب.
+​created_at (timestamp without time zone).
+​9. جدول student_progress (متابعة تقدم الطلاب)
+​الوصف: تسجيل إنجازات الطلاب وإتمامهم للدروس ودرجات الاختبارات.
+​الأعمدة:
+​id (bigint, NotNull): معرف السجل.
+​user_id (uuid, NotNull): معرف الطالب أو المستخدم.
+​lesson_id (bigint, Nullable): معرف الدرس (lessons.id).
+​is_completed (boolean, Default: false): هل أنهى الدرس أم لا.
+​quiz_score (integer, Default: 0): درجة الاختبار الخاصة بالدرس.
+​updated_at (timestamp with time zone).
+​10. جدول courses (المقالات أو المسارات البديلة)
+​الوصف: مسارات تعليمية إضافية أو تجريبية.
+​الأعمدة:
+​id (uuid, Default: gen_random_uuid()): معرف فريد.
+​title (character varying, NotNull): عنوان المسار.
+​subject_code (character varying, NotNull): كود المادة.
+​grade_level (character varying, Default: 'Grade 1'): المرحلة.
+​term (character varying, Default: 'Term 1'): الترم.
+​description (text, Nullable): الوصف.
+​icon (character varying, Nullable): الأيقونة.
+​is_experimental (boolean, Default: true): مؤشر هل هو مسار تجريبي.
+​created_at (timestamp with time zone).
+​11. جدول tenants (المؤسسات)
+​الوصف: دعم بنية تعدد المستأجرين (Multi-tenancy).
+​الأعمدة:
+​id (uuid, Default: gen_random_uuid()): المعرف.
+​name (text, NotNull): اسم المؤسسة/المنصة الفرعية.
+​subdomain (text, NotNull): النطاق الفرعي.
+​plan (text, Default: 'basic'): خطة الاشتراك.
+​is_active (boolean, Default: true): حالة التفعيل.
+​created_at (timestamp with time zone).
