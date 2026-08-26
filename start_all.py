@@ -62,7 +62,7 @@ def main():
     )
     
     print("\n" + "="*50)
-    print(f"{GREEN}🎯 المنصة تعمل الآن بكامل طاقتها يا عماد!{RESET}")
+    print(f"{GREEN}🎯 المنصة تعمل الآن بكامل طاقتها يا Hero !{RESET}")
     print(f"🔗 Backend API:  http://localhost:8000")
     print(f"🔗 Frontend UI:  http://localhost:3000")
     print(f"⏹️  اضغط Ctrl+C لإيقاف النظامين بأمان.")
