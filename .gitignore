@@ -1,12 +1,48 @@
+# Dependencies
 node_modules/
-build/
-dist/
-.env
-__pycache__/
-*.pyc
-.aider*
+.venv/
 venv/
-node_modules/
-.next/
+env/
+
+# Environment / Secrets
+.env
+.env.*
+!.env.example
+
+# Build output
 dist/
 build/
+.next/
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+nohup.out
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+
+# Local databases / generated data
+*.db
+*.sqlite
+*.sqlite3
+
+# Coverage
+coverage/
