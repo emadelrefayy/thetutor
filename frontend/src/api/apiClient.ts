@@ -1,32 +1,194 @@
-// API Client لربط الفرونت إند بالباك إند المحلي (FastAPI على بورت 8000)
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://localhost:8000/api";
+
+type RequestOptions = RequestInit & {
+  token?: string;
+};
+
+async function request<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const headers = new Headers(
+    options.headers,
+  );
+
+  headers.set("Accept", "application/json");
+
+  if (options.body) {
+    headers.set(
+      "Content-Type",
+      "application/json",
+    );
+  }
+
+  if (options.token) {
+    headers.set(
+      "Authorization",
+      `Bearer ${options.token}`,
+    );
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}${path}`,
+    {
+      ...options,
+      headers,
+    },
+  );
+
+  if (!response.ok) {
+    let message =
+      `API request failed (${response.status})`;
+
+    try {
+      const error = await response.json();
+
+      if (typeof error?.detail === "string") {
+        message = error.detail;
+      }
+    } catch {
+      // Keep the default error message.
+    }
+
+    throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return response.json() as Promise<T>;
+}
+
 
 export const apiClient = {
-  async getSubjects() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/subjects`);
-      const result = await response.json();
-      if (result.success) {
-        return result.data;
-      }
-      throw new Error(result.message || "Failed to fetch subjects");
-    } catch (error) {
-      console.error("API Error (getSubjects):", error);
-      return [];
-    }
+  // Curriculum
+
+  getGrades() {
+    return request("/grades");
   },
 
-  async getLessons(subjectId: number) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/lessons/${subjectId}`);
-      const result = await response.json();
-      if (result.success) {
-        return result.data;
-      }
-      throw new Error(result.message || "Failed to fetch lessons");
-    } catch (error) {
-      console.error(`API Error (getLessons for subject ${subjectId}):`, error);
-      return [];
-    }
-  }
+  getTerms(gradeId: number) {
+    return request(
+      `/grades/${gradeId}/terms`,
+    );
+  },
+
+  getSubjects(termId: number) {
+    return request(
+      `/terms/${termId}/subjects`,
+    );
+  },
+
+  getUnits(subjectId: number) {
+    return request(
+      `/subjects/${subjectId}/units`,
+    );
+  },
+
+  getLessons(unitId: number) {
+    return request(
+      `/units/${unitId}/lessons`,
+    );
+  },
+
+  getLesson(lessonId: number) {
+    return request(
+      `/lessons/${lessonId}`,
+    );
+  },
+
+  getLessonContent(lessonId: number) {
+    return request(
+      `/lessons/${lessonId}/content`,
+    );
+  },
+
+  getLessonAssets(lessonId: number) {
+    return request(
+      `/lessons/${lessonId}/assets`,
+    );
+  },
+
+  getLessonQuestions(lessonId: number) {
+    return request(
+      `/lessons/${lessonId}/questions`,
+    );
+  },
+
+  getQuestion(questionId: string) {
+    return request(
+      `/questions/${questionId}`,
+    );
+  },
+
+  // Student
+
+  getStudent(
+    studentProfileId: string,
+    token: string,
+  ) {
+    return request(
+      `/students/${studentProfileId}`,
+      { token },
+    );
+  },
+
+  getStudentProgress(
+    studentProfileId: string,
+    token: string,
+  ) {
+    return request(
+      `/students/${studentProfileId}/progress`,
+      { token },
+    );
+  },
+
+  getStudentAnalytics(
+    studentProfileId: string,
+    token: string,
+  ) {
+    return request(
+      `/students/${studentProfileId}/analytics`,
+      { token },
+    );
+  },
+
+  // Parent
+
+  createParentInvitation(
+    studentProfileId: string,
+    token: string,
+  ) {
+    return request(
+      `/parent/invitations?student_profile_id=${encodeURIComponent(
+        studentProfileId,
+      )}`,
+      {
+        method: "POST",
+        token,
+      },
+    );
+  },
+
+  claimParentInvitation(
+    code: string,
+    token: string,
+  ) {
+    return request(
+      `/parent/invitations/${encodeURIComponent(code)}/claim`,
+      {
+        method: "POST",
+        token,
+      },
+    );
+  },
+
+  // Health
+
+  health() {
+    return request("/health");
+  },
 };
