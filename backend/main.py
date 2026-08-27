@@ -26,16 +26,23 @@ if not SUPABASE_URL:
 if not SUPABASE_KEY:
     raise RuntimeError("Missing SUPABASE_KEY.")
 
+if not SUPABASE_SERVICE_ROLE_KEY:
+    raise RuntimeError(
+        "Missing SUPABASE_SERVICE_ROLE_KEY."
+    )
+
 SUPABASE_REST_URL = (
     f"{SUPABASE_URL.rstrip('/')}/rest/v1"
 )
 
+SUPABASE_AUTH_URL = (
+    f"{SUPABASE_URL.rstrip('/')}/auth/v1"
+)
 
 app = FastAPI(
     title="The Tutor API",
     version="1.0.0",
 )
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,36 +57,49 @@ app.add_middleware(
 )
 
 
-def build_headers(
-    authorization: str | None = None,
-    privileged: bool = False,
+def require_bearer(
+    authorization: str | None,
+) -> str:
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Authorization required.",
+        )
+
+    if not authorization.lower().startswith(
+        "bearer "
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Authorization header.",
+        )
+
+    return authorization
+
+
+async def supabase_auth_user(
+    authorization: str,
 ):
-    if privileged:
-        if not SUPABASE_SERVICE_ROLE_KEY:
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "SUPABASE_SERVICE_ROLE_KEY "
-                    "is not configured."
-                ),
-            )
-
-        key = SUPABASE_SERVICE_ROLE_KEY
-        bearer = f"Bearer {key}"
-
-    elif authorization:
-        key = SUPABASE_KEY
-        bearer = authorization
-
-    else:
-        key = SUPABASE_KEY
-        bearer = f"Bearer {key}"
-
-    return {
-        "apikey": key,
-        "Authorization": bearer,
-        "Content-Type": "application/json",
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": authorization,
     }
+
+    async with httpx.AsyncClient(
+        timeout=15.0
+    ) as client:
+        response = await client.get(
+            f"{SUPABASE_AUTH_URL}/user",
+            headers=headers,
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired session.",
+        )
+
+    return response.json()
 
 
 async def supabase_request(
@@ -91,10 +111,18 @@ async def supabase_request(
     authorization: str | None = None,
     privileged: bool = False,
 ):
-    headers = build_headers(
-        authorization=authorization,
-        privileged=privileged,
-    )
+    if privileged:
+        key = SUPABASE_SERVICE_ROLE_KEY
+        bearer = f"Bearer {key}"
+    else:
+        key = SUPABASE_KEY
+        bearer = authorization or f"Bearer {key}"
+
+    headers = {
+        "apikey": key,
+        "Authorization": bearer,
+        "Content-Type": "application/json",
+    }
 
     if method in {"POST", "PATCH", "PUT"}:
         headers["Prefer"] = "return=representation"
@@ -126,24 +154,11 @@ async def supabase_request(
     return response.json()
 
 
-def require_auth(
+async def authenticated_user(
     authorization: str | None,
 ):
-    if not authorization:
-        raise HTTPException(
-            status_code=401,
-            detail="Authorization header required.",
-        )
-
-    if not authorization.lower().startswith(
-        "bearer "
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid Authorization header.",
-        )
-
-    return authorization
+    token = require_bearer(authorization)
+    return await supabase_auth_user(token)
 
 
 # ------------------------------------------------------------------
@@ -224,7 +239,7 @@ async def get_subject_units(
         params={
             "subject_id": f"eq.{subject_id}",
             "select": "*",
-            "order": "id.asc",
+            "order": "unit_number.asc",
         },
     )
 
@@ -358,11 +373,7 @@ async def get_lesson_questions(
         )
 
         question = questions[0]
-
-        question["relevance"] = link[
-            "relevance"
-        ]
-
+        question["relevance"] = link["relevance"]
         question["options"] = options
 
         result.append(question)
@@ -428,7 +439,14 @@ async def get_student(
         default=None
     ),
 ):
-    auth = require_auth(authorization)
+    auth = require_bearer(authorization)
+    user = await supabase_auth_user(auth)
+
+    if user.get("id") != student_profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied.",
+        )
 
     rows = await supabase_request(
         "GET",
@@ -461,7 +479,14 @@ async def get_student_progress(
         default=None
     ),
 ):
-    auth = require_auth(authorization)
+    auth = require_bearer(authorization)
+    user = await supabase_auth_user(auth)
+
+    if user.get("id") != student_profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied.",
+        )
 
     return await supabase_request(
         "GET",
@@ -486,7 +511,14 @@ async def get_student_analytics(
         default=None
     ),
 ):
-    auth = require_auth(authorization)
+    auth = require_bearer(authorization)
+    user = await supabase_auth_user(auth)
+
+    if user.get("id") != student_profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied.",
+        )
 
     metrics = await supabase_request(
         "GET",
@@ -545,7 +577,7 @@ def generate_invitation_code():
         "TUTOR-"
         + "".join(
             secrets.choice(alphabet)
-            for _ in range(6)
+            for _ in range(8)
         )
     )
 
@@ -555,12 +587,33 @@ def generate_invitation_code():
 )
 async def create_parent_invitation(
     student_profile_id: str,
-    created_by: str,
     authorization: str | None = Header(
         default=None
     ),
 ):
-    auth = require_auth(authorization)
+    auth = require_bearer(authorization)
+    user = await supabase_auth_user(auth)
+
+    created_by = user.get("id")
+
+    student = await supabase_request(
+        "GET",
+        "student_profiles",
+        params={
+            "profile_id": (
+                f"eq.{student_profile_id}"
+            ),
+            "select": "profile_id",
+            "limit": "1",
+        },
+        authorization=auth,
+    )
+
+    if not student:
+        raise HTTPException(
+            status_code=404,
+            detail="Student not found.",
+        )
 
     code = generate_invitation_code()
 
@@ -584,12 +637,14 @@ async def create_parent_invitation(
 )
 async def claim_parent_invitation(
     code: str,
-    parent_profile_id: str,
     authorization: str | None = Header(
         default=None
     ),
 ):
-    auth = require_auth(authorization)
+    auth = require_bearer(authorization)
+    user = await supabase_auth_user(auth)
+
+    parent_profile_id = user.get("id")
 
     invitations = await supabase_request(
         "GET",
@@ -637,6 +692,29 @@ async def claim_parent_invitation(
                 status_code=410,
                 detail="Invitation expired.",
             )
+
+    existing = await supabase_request(
+        "GET",
+        "parent_students",
+        params={
+            "parent_profile_id": (
+                f"eq.{parent_profile_id}"
+            ),
+            "student_profile_id": (
+                f"eq.{invitation['student_profile_id']}"
+            ),
+            "select": "parent_profile_id",
+            "limit": "1",
+        },
+        authorization=auth,
+        privileged=True,
+    )
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="Relationship already exists.",
+        )
 
     relationship = await supabase_request(
         "POST",
