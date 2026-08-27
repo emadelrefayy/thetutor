@@ -1,26 +1,79 @@
 import os
-from supabase import create_client, Client
 
-url = "https://xsfjlzneykogdltuiwno.supabase.co"
-key = "sb_publishable_F9TC2g0rL4mwufMz0h0iJw_FSfOhj9-"
+from dotenv import load_dotenv
+from supabase import Client, create_client
 
-supabase: Client = create_client(url, key)
 
-print("🚀 جاري الاتصال بقاعدة بيانات Supabase السحابية...")
+load_dotenv()
 
-# إدخال الصفوف الدراسية الأساسية
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+
+if not SUPABASE_URL:
+    raise RuntimeError("Missing SUPABASE_URL.")
+
+if not SUPABASE_KEY:
+    raise RuntimeError("Missing SUPABASE_KEY.")
+
+
+supabase: Client = create_client(
+    SUPABASE_URL,
+    SUPABASE_KEY,
+)
+
+
+print(
+    "Connecting to Supabase Cloud..."
+)
+
+
+# ------------------------------------------------------------------
+# Basic curriculum seed
+# ------------------------------------------------------------------
+
 grades_data = [
-    {"id": 1, "name": "الصف الأول الابتدائي"},
-    {"id": 2, "name": "الصف الثاني الابتدائي"},
-    {"id": 3, "name": "الصف الثالث الابتدائي"},
-    {"id": 4, "name": "الصف الرابع الابتدائي"},
-    {"id": 5, "name": "الصف الخامس الابتدائي"},
-    {"id": 6, "name": "الصف السادس الابتدائي"},
+    {
+        "id": 1,
+        "name": "الصف الأول الابتدائي",
+    },
+    {
+        "id": 2,
+        "name": "الصف الثاني الابتدائي",
+    },
+    {
+        "id": 3,
+        "name": "الصف الثالث الابتدائي",
+    },
+    {
+        "id": 4,
+        "name": "الصف الرابع الابتدائي",
+    },
+    {
+        "id": 5,
+        "name": "الصف الخامس الابتدائي",
+    },
+    {
+        "id": 6,
+        "name": "الصف السادس الابتدائي",
+    },
 ]
 
-try:
-    res = supabase.table("grades").upsert(grades_data).execute()
-    print("✅ تم رفع وحقن الصفوف الدراسية على الكلاود بنجاح!")
-except Exception as e:
-    print(f"⚠️ تنبيه أثناء الحقن: {e}")
 
+try:
+    response = (
+        supabase
+        .table("grades")
+        .upsert(grades_data)
+        .execute()
+    )
+
+    print(
+        "Grades seeded successfully."
+    )
+
+except Exception as exc:
+    print(
+        f"Seed operation failed: {exc}"
+    )
