@@ -4,3 +4,9 @@ dist/
 .env
 __pycache__/
 *.pyc
+.aider*
+venv/
+node_modules/
+.next/
+dist/
+build/

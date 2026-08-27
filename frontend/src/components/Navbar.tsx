@@ -36,7 +36,7 @@ export const Navbar: React.FC = () => {
                 isActive('/student') ? 'bg-amber-500 text-slate-950 shadow-md scale-105' : 'bg-slate-900 text-slate-300 hover:text-white border border-slate-800'
               }`}
             >
-              📚 الطلاب
+              🏫 المدرسة
             </Link>
 
             <Link 
