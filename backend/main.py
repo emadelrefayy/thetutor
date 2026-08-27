@@ -1,6 +1,4 @@
 import os
-import random
-import string
 
 import httpx
 from dotenv import load_dotenv
@@ -11,17 +9,28 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+FRONTEND_ORIGIN = os.getenv(
+    "FRONTEND_ORIGIN",
+    "http://localhost:5173",
+)
 
-if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+if not SUPABASE_URL:
+    raise RuntimeError("Missing SUPABASE_URL.")
+
+if not SUPABASE_SERVICE_ROLE_KEY:
     raise RuntimeError(
-        "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY."
+        "Missing SUPABASE_SERVICE_ROLE_KEY."
     )
 
-SUPABASE_REST_URL = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
+SUPABASE_REST_URL = (
+    f"{SUPABASE_URL.rstrip('/')}/rest/v1"
+)
 
 SUPABASE_HEADERS = {
     "apikey": SUPABASE_SERVICE_ROLE_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    "Authorization": (
+        f"Bearer {SUPABASE_SERVICE_ROLE_KEY}"
+    ),
     "Content-Type": "application/json",
 }
 
@@ -32,226 +41,256 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv(
-        "FRONTEND_ORIGIN",
-        "http://localhost:5173",
-    ).split(","),
+    allow_origins=[
+        origin.strip()
+        for origin in FRONTEND_ORIGIN.split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-async def supabase_get(
+async def supabase_request(
+    method: str,
     table: str,
-    params: dict,
-):
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.get(
-            f"{SUPABASE_REST_URL}/{table}",
-            headers=SUPABASE_HEADERS,
-            params=params,
-        )
-
-    if response.status_code >= 400:
-        raise HTTPException(
-            status_code=response.status_code,
-            detail=response.text,
-        )
-
-    return response.json()
-
-
-async def supabase_patch(
-    table: str,
-    filters: dict,
-    payload: dict,
-):
-    params = {
-        f"{key}": f"eq.{value}"
-        for key, value in filters.items()
-    }
-
-    headers = {
-        **SUPABASE_HEADERS,
-        "Prefer": "return=representation",
-    }
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.patch(
-            f"{SUPABASE_REST_URL}/{table}",
-            headers=headers,
-            params=params,
-            json=payload,
-        )
-
-    if response.status_code >= 400:
-        raise HTTPException(
-            status_code=response.status_code,
-            detail=response.text,
-        )
-
-    return response.json()
-
-
-async def supabase_post(
-    table: str,
-    payload: dict,
+    *,
+    params: dict | None = None,
+    json: dict | list | None = None,
 ):
     headers = {
         **SUPABASE_HEADERS,
         "Prefer": "return=representation",
     }
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(
+    async with httpx.AsyncClient(
+        timeout=30.0
+    ) as client:
+        response = await client.request(
+            method,
             f"{SUPABASE_REST_URL}/{table}",
             headers=headers,
-            json=payload,
+            params=params,
+            json=json,
         )
 
     if response.status_code >= 400:
         raise HTTPException(
-            status_code=response.status_code,
-            detail=response.text,
+            status_code=502,
+            detail={
+                "message": "Supabase request failed.",
+                "status": response.status_code,
+                "response": response.text,
+            },
         )
 
+    if not response.content:
+        return []
+
     return response.json()
-
-
-def generate_invitation_code() -> str:
-    chars = string.ascii_uppercase + string.digits
-
-    return "PAR-" + "".join(
-        random.choice(chars)
-        for _ in range(6)
-    )
 
 
 @app.get("/")
 async def root():
     return {
-        "status": "online",
         "service": "The Tutor API",
+        "status": "online",
     }
 
 
 @app.get("/api/health")
 async def health():
     return {
-        "status": "healthy",
         "service": "The Tutor API",
+        "status": "healthy",
     }
 
 
-@app.get("/api/subjects/grade/{grade_id}")
-async def get_subjects_by_grade(
-    grade_id: int,
-):
-    terms = await supabase_get(
-        "terms",
-        {
-            "grade_id": f"eq.{grade_id}",
-            "select": "id",
-        },
-    )
-
-    if not terms:
-        return []
-
-    term_ids = ",".join(
-        str(term["id"])
-        for term in terms
-    )
-
-    return await supabase_get(
-        "subjects",
-        {
-            "term_id": f"in.({term_ids})",
+@app.get("/api/grades")
+async def get_grades():
+    return await supabase_request(
+        "GET",
+        "grades",
+        params={
             "select": "*",
-            "order": "name.asc",
+            "order": "id.asc",
         },
     )
 
 
-@app.post(
-    "/api/admin/generate-student-code/{student_id}"
-)
-async def generate_student_code(
-    student_id: str,
+@app.get("/api/grades/{grade_id}/terms")
+async def get_grade_terms(
     grade_id: int,
 ):
-    code = generate_invitation_code()
-
-    rows = await supabase_patch(
-        "profiles",
-        {"id": student_id},
-        {
-            "invitation_code": code,
-            "is_code_used": False,
-            "grade_id": grade_id,
+    return await supabase_request(
+        "GET",
+        "terms",
+        params={
+            "grade_id": f"eq.{grade_id}",
+            "select": "*",
+            "order": "id.asc",
         },
     )
 
-    if not rows:
-        raise HTTPException(
-            status_code=404,
-            detail="Student not found.",
-        )
 
-    return {
-        "status": "success",
-        "invitation_code": code,
-        "grade_id": grade_id,
-    }
-
-
-@app.post("/api/parent/claim-child")
-async def claim_child(
-    parent_id: str,
-    invitation_code: str,
+@app.get("/api/terms/{term_id}/subjects")
+async def get_term_subjects(
+    term_id: int,
 ):
-    students = await supabase_get(
-        "profiles",
-        {
-            "invitation_code": (
-                f"eq.{invitation_code}"
-            ),
-            "select": "id,full_name,grade_id",
+    return await supabase_request(
+        "GET",
+        "subjects",
+        params={
+            "term_id": f"eq.{term_id}",
+            "select": "*",
+            "order": "id.asc",
+        },
+    )
+
+
+@app.get("/api/subjects/{subject_id}/units")
+async def get_subject_units(
+    subject_id: int,
+):
+    return await supabase_request(
+        "GET",
+        "units",
+        params={
+            "subject_id": f"eq.{subject_id}",
+            "select": "*",
+            "order": "id.asc",
+        },
+    )
+
+
+@app.get("/api/units/{unit_id}/lessons")
+async def get_unit_lessons(
+    unit_id: int,
+):
+    return await supabase_request(
+        "GET",
+        "lessons",
+        params={
+            "unit_id": f"eq.{unit_id}",
+            "select": "*",
+            "order": "id.asc",
+        },
+    )
+
+
+@app.get("/api/lessons/{lesson_id}")
+async def get_lesson(
+    lesson_id: int,
+):
+    lessons = await supabase_request(
+        "GET",
+        "lessons",
+        params={
+            "id": f"eq.{lesson_id}",
+            "select": "*",
             "limit": "1",
         },
     )
 
-    if not students:
+    if not lessons:
         raise HTTPException(
             status_code=404,
-            detail="Invalid invitation code.",
+            detail="Lesson not found.",
         )
 
-    student = students[0]
+    return lessons[0]
 
-    relation = await supabase_post(
-        "parent_students",
-        {
-            "parent_id": parent_id,
-            "student_id": student["id"],
+
+@app.get(
+    "/api/lessons/{lesson_id}/content"
+)
+async def get_lesson_content(
+    lesson_id: int,
+):
+    return await supabase_request(
+        "GET",
+        "lesson_content_blocks",
+        params={
+            "lesson_id": f"eq.{lesson_id}",
+            "select": "*",
+            "order": "sort_order.asc",
         },
     )
 
-    await supabase_patch(
-        "profiles",
-        {"id": student["id"]},
-        {"is_code_used": True},
+
+@app.get(
+    "/api/lessons/{lesson_id}/assets"
+)
+async def get_lesson_assets(
+    lesson_id: int,
+):
+    return await supabase_request(
+        "GET",
+        "lesson_assets",
+        params={
+            "lesson_id": f"eq.{lesson_id}",
+            "select": "*",
+            "order": "id.asc",
+        },
     )
 
-    return {
-        "status": "success",
-        "student_id": student["id"],
-        "student_name": student.get(
-            "full_name"
-        ),
-        "grade_id": student.get(
-            "grade_id"
-        ),
-        "relation": relation,
-    }
+
+@app.get(
+    "/api/lessons/{lesson_id}/questions"
+)
+async def get_lesson_questions(
+    lesson_id: int,
+):
+    return await supabase_request(
+        "GET",
+        "question_lessons",
+        params={
+            "lesson_id": f"eq.{lesson_id}",
+            "select": (
+                "relevance,"
+                "questions("
+                "id,"
+                "question_type,"
+                "difficulty,"
+                "prompt,"
+                "explanation,"
+                "correct_answer,"
+                "metadata,"
+                "source,"
+                "status,"
+                "skill_type,"
+                "generation_source,"
+                "question_options(*)"
+                ")"
+            ),
+            "order": "relevance.desc",
+        },
+    )
+
+
+@app.get(
+    "/api/questions/{question_id}"
+)
+async def get_question(
+    question_id: str,
+):
+    questions = await supabase_request(
+        "GET",
+        "questions",
+        params={
+            "id": f"eq.{question_id}",
+            "select": (
+                "*,question_options(*)"
+            ),
+            "limit": "1",
+        },
+    )
+
+    if not questions:
+        raise HTTPException(
+            status_code=404,
+            detail="Question not found.",
+        )
+
+    return questions[0]
