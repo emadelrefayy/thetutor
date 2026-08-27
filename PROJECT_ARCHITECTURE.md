@@ -2,41 +2,47 @@
 
 **Status:** ACTIVE  
 **Repository:** `emadelrefayy/thetutor`  
-**Database:** Supabase PostgreSQL  
-**Database Project:** `thetutor`
+**Frontend:** React / Vite  
+**Backend:** FastAPI / Python  
+**Cloud Platform:** Supabase  
+**Database:** PostgreSQL
 
 ---
 
-## 1. Architecture Source of Truth
+# 1. Architecture Overview
 
-The live Supabase database is the source of truth for the data architecture.
-
-The canonical database specification is:
-
-`DATABASE_SCHEMA_MASTER_PLAN.md`
-
-Application code and documentation must follow the canonical schema.
-
-No legacy architecture should be reintroduced.
-
----
-
-# 2. System Architecture
+The Tutor uses a three-layer application architecture:
 
 ```text
-┌─────────────────────────────┐
-│        The Tutor UI         │
-│       React / Vite          │
-└──────────────┬──────────────┘
+┌──────────────────────────────┐
+│          FRONTEND            │
+│        React / Vite          │
+│                              │
+│ UI / UX / Student Experience │
+└──────────────┬───────────────┘
                │
+               │ HTTPS / REST API
                ▼
-┌─────────────────────────────┐
-│       Supabase Client       │
-│      Auth + PostgreSQL      │
-└──────────────┬──────────────┘
+┌──────────────────────────────┐
+│          BACKEND             │
+│        FastAPI / Python      │
+│                              │
+│ Business Logic               │
+│ Analytics                    │
+│ AI Processing                │
+│ Image Processing             │
+│ Secure Operations            │
+│ Integrations                 │
+└──────────────┬───────────────┘
                │
+               │ Secure API / DB Access
                ▼
-┌─────────────────────────────┐
-│      Supabase PostgreSQL    │
-│        Canonical Schema     │
-└─────────────────────────────┘
+┌──────────────────────────────┐
+│           SUPABASE           │
+│                              │
+│ Auth                         │
+│ PostgreSQL                   │
+│ Storage                      │
+│ Row Level Security           │
+│ Database Functions           │
+└──────────────────────────────┘
