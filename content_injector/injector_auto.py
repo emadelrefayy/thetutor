@@ -1,144 +1,249 @@
-rm -f injector_auto.py && cat << 'EOF' > injector_auto.py
-import os
-import re
+import asyncio
 import json
+import os
 import sys
-import requests
-import dns.resolver
-from supabase import create_client, Client
+from pathlib import Path
 
-sys.stdout.reconfigure(encoding='utf-8')
+import httpx
+from dotenv import load_dotenv
 
-def custom_resolver(domain):
-    resolver = dns.resolver.Resolver()
-    resolver.nameservers = ['8.8.8.8', '1.1.1.1']
-    try:
-        answers = resolver.resolve(domain, 'A')
-        return answers[0].to_text()
-    except Exception:
-        return None
+load_dotenv()
 
-custom_resolver("xsfjlzneykogdltuiwno.supabase.co")
-custom_resolver("openrouter.ai")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-SUPABASE_URL = "https://xsfjlzneykogdltuiwno.supabase.co"
-SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
+if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+    raise RuntimeError(
+        "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment."
+    )
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+BASE_URL = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
 
-def call_openrouter(prompt_text):
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://thetutor.app",
-        "X-Title": "TheTutor App",
-        "Content-Type": "application/json"
-    }
+HEADERS = {
+    "apikey": SUPABASE_SERVICE_ROLE_KEY,
+    "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation",
+}
+
+
+async def get(client, table, params):
+    response = await client.get(
+        f"{BASE_URL}/{table}",
+        headers=HEADERS,
+        params=params,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+async def post(client, table, payload):
+    response = await client.post(
+        f"{BASE_URL}/{table}",
+        headers=HEADERS,
+        json=payload,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def load_source(path):
+    file_path = Path(path)
+
+    if not file_path.exists():
+        raise FileNotFoundError(path)
+
+    with file_path.open("r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+async def find_existing_question(client, prompt):
+    rows = await get(
+        client,
+        "questions",
+        {
+            "prompt": f"eq.{prompt}",
+            "select": "id,prompt",
+            "limit": "1",
+        },
+    )
+    return rows[0] if rows else None
+
+
+async def create_question(client, question):
+    existing = await find_existing_question(
+        client,
+        question["prompt"],
+    )
+
+    if existing:
+        return existing, False
+
     payload = {
-        "model": "openrouter/free",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a professional educational JSON generator. Output ONLY a raw JSON object. Do not add markdown backticks, no code blocks, and no thinking text."
-            },
-            {"role": "user", "content": prompt_text}
-        ]
+        "question_type": question.get(
+            "question_type",
+            "multiple_choice",
+        ),
+        "difficulty": question.get("difficulty"),
+        "prompt": question["prompt"],
+        "explanation": question.get("explanation"),
+        "correct_answer": question.get("correct_answer"),
+        "metadata": question.get("metadata", {}),
+        "source": question.get(
+            "source",
+            "content_injector_auto",
+        ),
+        "status": question.get("status", "draft"),
+        "skill_type": question.get("skill_type"),
+        "generation_source": question.get(
+            "generation_source",
+            "automatic",
+        ),
     }
-    res = requests.post(url, headers=headers, json=payload, timeout=60)
-    if res.status_code == 200:
-        res_data = res.json()
-        if 'choices' in res_data and len(res_data['choices']) > 0:
-            content = res_data['choices'][0]['message']['content']
-            if content and len(content.strip()) > 0:
-                return content
-    raise Exception(f"OpenRouter Call Failed. Status: {res.status_code}, Response: {res.text}")
 
-def clean_and_parse_json(raw_text):
-    text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
-    text = re.sub(r'```json\s*|\s*```', '', text).strip()
-    start_idx = text.find('{')
-    end_idx = text.rfind('}')
-    if start_idx != -1 and end_idx != -1:
-        text = text[start_idx:end_idx+1]
-    return json.loads(text, strict=False)
+    rows = await post(
+        client,
+        "questions",
+        payload,
+    )
 
-def run_auto_injector():
-    print("🔍 جاري جلب الدروس التي تحتاج إلى محتوى من قاعدة البيانات...")
-    response = supabase.table("lessons").select("*").or_("content_summary.is.null,content_summary.eq.''").execute()
-    lessons = response.data
+    if not rows:
+        raise RuntimeError("Question insert returned no row.")
 
-    if not lessons:
-        print("🎉 رائع جداً! لا توجد دروس فارغة، جميع الدروس تم حقن محتواها مسبقاً.")
+    return rows[0], True
+
+
+async def create_options(client, question_id, options):
+    if not options:
         return
 
-    print(f"📦 تم العثور على {len(lessons)} درس يحتاج إلى حقن المحتوى. بدء العملية...\n")
+    existing = await get(
+        client,
+        "question_options",
+        {
+            "question_id": f"eq.{question_id}",
+            "select": "id",
+            "limit": "1",
+        },
+    )
 
-    for lesson in lessons:
-        lesson_id = lesson['id']
-        title = lesson['title']
-        unit_num = lesson['unit_number']
-        les_num = lesson['lesson_number']
-        
-        print(f"🚀 معالجة الدرس [ID: {lesson_id}] - {title} (الوحدة {unit_num}, الدرس {les_num})")
+    if existing:
+        return
 
-        prompt = f"""
-        Act as an expert curriculum developer for primary school students. Create educational content for this lesson:
-        - Lesson Title: {title}
-        - Unit Number: {unit_num}
-        - Lesson Number: {les_num}
+    payload = []
 
-        Return ONLY valid JSON with this exact schema:
-        {{
-            "mental_hook": "Engaging introductory sentence in Arabic",
-            "explanation_text": "Detailed educational lesson body in Arabic (150-200 words)",
-            "memory_anchor": "Catchy memory tip or mnemonic in Arabic",
-            "quizzes": [
-                {{
-                    "question": "Question text in Arabic",
-                    "options": ["Opt1", "Opt2", "Opt3", "Opt4"],
-                    "correct_option": 0,
-                    "difficulty": "easy",
-                    "explanation": "Why this answer is correct in Arabic"
-                }}
-            ]
-        }}
-        """
-        try:
-            raw_content = call_openrouter(prompt)
-            data = clean_and_parse_json(raw_content)
+    for index, option in enumerate(options):
+        payload.append(
+            {
+                "question_id": question_id,
+                "option_key": option.get(
+                    "option_key",
+                    chr(65 + index),
+                ),
+                "option_text": option["option_text"],
+                "is_correct": bool(
+                    option.get("is_correct", False)
+                ),
+                "sort_order": option.get(
+                    "sort_order",
+                    index,
+                ),
+                "metadata": option.get(
+                    "metadata",
+                    {},
+                ),
+            }
+        )
 
-            full_summary = (
-                f"### Mental Hook\n{data['mental_hook']}\n\n"
-                f"### Lesson Explanation\n{data['explanation_text']}\n\n"
-                f"![Infographic](https://placehold.co/600x400)\n\n"
-                f"### Memory Anchor\n{data['memory_anchor']}"
+    await post(
+        client,
+        "question_options",
+        payload,
+    )
+
+
+async def link_lesson(client, question_id, lesson_id):
+    existing = await get(
+        client,
+        "question_lessons",
+        {
+            "question_id": f"eq.{question_id}",
+            "lesson_id": f"eq.{lesson_id}",
+            "select": "question_id",
+            "limit": "1",
+        },
+    )
+
+    if existing:
+        return
+
+    await post(
+        client,
+        "question_lessons",
+        {
+            "question_id": question_id,
+            "lesson_id": lesson_id,
+            "relevance": 1.0,
+        },
+    )
+
+
+async def run(input_file):
+    data = load_source(input_file)
+
+    lesson_id = data.get("lesson_id")
+    questions = data.get("questions", [])
+
+    if not isinstance(questions, list):
+        raise ValueError("'questions' must be a list.")
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        for index, question in enumerate(
+            questions,
+            start=1,
+        ):
+            question, created = await create_question(
+                client,
+                question,
             )
 
-            supabase.table("lessons").update({
-                "content_summary": full_summary
-            }).eq("id", lesson_id).execute()
+            await create_options(
+                client,
+                question["id"],
+                data.get("options", [])
+                if "options" not in question
+                else question["options"],
+            )
 
-            for q in data['quizzes']:
-                quiz_payload = {
-                    "lesson_id": lesson_id,
-                    "question": q['question'],
-                    "options": {
-                        "choices": q['options'],
-                        "difficulty": q['difficulty'],
-                        "explanation": q['explanation']
-                    },
-                    "correct_option": q['correct_option']
-                }
-                supabase.table("quizzes").insert(quiz_payload).execute()
+            current_lesson_id = question.get(
+                "lesson_id",
+                lesson_id,
+            )
 
-            print(f"✅ تم بنجاح تحديث الدرس ID: {lesson_id} وإضافة أسئلته.\n")
+            if current_lesson_id is not None:
+                await link_lesson(
+                    client,
+                    question["id"],
+                    int(current_lesson_id),
+                )
 
-        except Exception as e:
-            print(f"❌ حدث خطأ أثناء معالجة الدرس {lesson_id}: {e}\n")
-            continue
+            state = "created" if created else "existing"
+
+            print(
+                f"[{index}/{len(questions)}] "
+                f"{state}: {question['id']}"
+            )
+
+
+def main():
+    if len(sys.argv) != 2:
+        print(
+            "Usage: python injector_auto.py <json_file>"
+        )
+        sys.exit(1)
+
+    asyncio.run(run(sys.argv[1]))
+
 
 if __name__ == "__main__":
-    run_auto_injector()
-EOF
-python3 injector_auto.py
+    main()
