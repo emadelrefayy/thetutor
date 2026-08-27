@@ -8,7 +8,13 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+
 load_dotenv()
+
+
+# ------------------------------------------------------------------
+# Environment
+# ------------------------------------------------------------------
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -20,25 +26,37 @@ FRONTEND_ORIGIN = os.getenv(
     "http://localhost:5173",
 )
 
+
 if not SUPABASE_URL:
-    raise RuntimeError("Missing SUPABASE_URL.")
+    raise RuntimeError(
+        "Missing SUPABASE_URL."
+    )
 
 if not SUPABASE_KEY:
-    raise RuntimeError("Missing SUPABASE_KEY.")
+    raise RuntimeError(
+        "Missing SUPABASE_KEY."
+    )
 
 if not SUPABASE_SERVICE_ROLE_KEY:
     raise RuntimeError(
         "Missing SUPABASE_SERVICE_ROLE_KEY."
     )
 
+
+SUPABASE_BASE_URL = SUPABASE_URL.rstrip("/")
+
 SUPABASE_REST_URL = (
-    f"{SUPABASE_URL.rstrip('/')}/rest/v1"
+    f"{SUPABASE_BASE_URL}/rest/v1"
 )
 
 SUPABASE_AUTH_URL = (
-    f"{SUPABASE_URL.rstrip('/')}/auth/v1"
+    f"{SUPABASE_BASE_URL}/auth/v1"
 )
 
+
+# ------------------------------------------------------------------
+# Application
+# ------------------------------------------------------------------
 
 app = FastAPI(
     title="The Tutor API",
@@ -46,13 +64,16 @@ app = FastAPI(
 )
 
 
+allowed_origins = [
+    origin.strip()
+    for origin in FRONTEND_ORIGIN.split(",")
+    if origin.strip()
+]
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        origin.strip()
-        for origin in FRONTEND_ORIGIN.split(",")
-        if origin.strip()
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,7 +83,6 @@ app.add_middleware(
 # ------------------------------------------------------------------
 # Authentication
 # ------------------------------------------------------------------
-
 
 def require_bearer(
     authorization: str | None,
@@ -81,12 +101,20 @@ def require_bearer(
             detail="Invalid Authorization header.",
         )
 
+    token = authorization[7:].strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Authorization token.",
+        )
+
     return authorization
 
 
 async def supabase_auth_user(
     authorization: str,
-):
+) -> dict:
     headers = {
         "apikey": SUPABASE_KEY,
         "Authorization": authorization,
@@ -106,13 +134,20 @@ async def supabase_auth_user(
             detail="Invalid or expired session.",
         )
 
-    return response.json()
+    user = response.json()
+
+    if not user.get("id"):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authenticated user.",
+        )
+
+    return user
 
 
 # ------------------------------------------------------------------
 # Supabase REST
 # ------------------------------------------------------------------
-
 
 async def supabase_request(
     method: str,
@@ -141,7 +176,9 @@ async def supabase_request(
     }
 
     if method in {"POST", "PATCH", "PUT"}:
-        headers["Prefer"] = "return=representation"
+        headers["Prefer"] = (
+            "return=representation"
+        )
 
     async with httpx.AsyncClient(
         timeout=30.0
@@ -158,7 +195,9 @@ async def supabase_request(
         raise HTTPException(
             status_code=502,
             detail={
-                "message": "Supabase request failed.",
+                "message": (
+                    "Supabase request failed."
+                ),
                 "status": response.status_code,
                 "response": response.text,
             },
@@ -173,7 +212,6 @@ async def supabase_request(
 # ------------------------------------------------------------------
 # Health
 # ------------------------------------------------------------------
-
 
 @app.get("/")
 async def root():
@@ -194,7 +232,6 @@ async def health():
 # ------------------------------------------------------------------
 # Curriculum
 # ------------------------------------------------------------------
-
 
 @app.get("/api/grades")
 async def get_grades():
@@ -329,7 +366,6 @@ async def get_lesson_assets(
 # Questions
 # ------------------------------------------------------------------
 
-
 @app.get(
     "/api/lessons/{lesson_id}/questions"
 )
@@ -357,9 +393,15 @@ async def get_lesson_questions(
             params={
                 "id": f"eq.{question_id}",
                 "select": (
-                    "id,question_type,difficulty,"
-                    "prompt,metadata,source,status,"
-                    "skill_type,generation_source"
+                    "id,"
+                    "question_type,"
+                    "difficulty,"
+                    "prompt,"
+                    "metadata,"
+                    "source,"
+                    "status,"
+                    "skill_type,"
+                    "generation_source"
                 ),
                 "limit": "1",
             },
@@ -372,17 +414,27 @@ async def get_lesson_questions(
             "GET",
             "question_options",
             params={
-                "question_id": f"eq.{question_id}",
+                "question_id": (
+                    f"eq.{question_id}"
+                ),
                 "select": (
-                    "id,question_id,option_key,"
-                    "option_text,sort_order,metadata"
+                    "id,"
+                    "question_id,"
+                    "option_key,"
+                    "option_text,"
+                    "sort_order,"
+                    "metadata"
                 ),
                 "order": "sort_order.asc",
             },
         )
 
         question = questions[0]
-        question["relevance"] = link["relevance"]
+
+        question["relevance"] = (
+            link.get("relevance")
+        )
+
         question["options"] = options
 
         result.append(question)
@@ -402,9 +454,15 @@ async def get_question(
         params={
             "id": f"eq.{question_id}",
             "select": (
-                "id,question_type,difficulty,"
-                "prompt,metadata,source,status,"
-                "skill_type,generation_source"
+                "id,"
+                "question_type,"
+                "difficulty,"
+                "prompt,"
+                "metadata,"
+                "source,"
+                "status,"
+                "skill_type,"
+                "generation_source"
             ),
             "limit": "1",
         },
@@ -420,10 +478,16 @@ async def get_question(
         "GET",
         "question_options",
         params={
-            "question_id": f"eq.{question_id}",
+            "question_id": (
+                f"eq.{question_id}"
+            ),
             "select": (
-                "id,question_id,option_key,"
-                "option_text,sort_order,metadata"
+                "id,"
+                "question_id,"
+                "option_key,"
+                "option_text,"
+                "sort_order,"
+                "metadata"
             ),
             "order": "sort_order.asc",
         },
@@ -438,7 +502,6 @@ async def get_question(
 # Student
 # ------------------------------------------------------------------
 
-
 @app.get(
     "/api/students/{student_profile_id}"
 )
@@ -449,6 +512,7 @@ async def get_student(
     ),
 ):
     auth = require_bearer(authorization)
+
     user = await supabase_auth_user(auth)
 
     if user.get("id") != student_profile_id:
@@ -489,6 +553,7 @@ async def get_student_progress(
     ),
 ):
     auth = require_bearer(authorization)
+
     user = await supabase_auth_user(auth)
 
     if user.get("id") != student_profile_id:
@@ -521,6 +586,7 @@ async def get_student_analytics(
     ),
 ):
     auth = require_bearer(authorization)
+
     user = await supabase_auth_user(auth)
 
     if user.get("id") != student_profile_id:
@@ -578,9 +644,11 @@ async def get_student_analytics(
 # Parent invitations
 # ------------------------------------------------------------------
 
-
 def generate_invitation_code():
-    alphabet = string.ascii_uppercase + string.digits
+    alphabet = (
+        string.ascii_uppercase
+        + string.digits
+    )
 
     return (
         "TUTOR-"
@@ -601,6 +669,7 @@ async def create_parent_invitation(
     ),
 ):
     auth = require_bearer(authorization)
+
     user = await supabase_auth_user(auth)
 
     created_by = user.get("id")
@@ -636,7 +705,9 @@ async def create_parent_invitation(
         "POST",
         "parent_invitations",
         payload={
-            "student_profile_id": student_profile_id,
+            "student_profile_id": (
+                student_profile_id
+            ),
             "created_by": created_by,
             "code": code,
         },
@@ -657,6 +728,7 @@ async def claim_parent_invitation(
     ),
 ):
     auth = require_bearer(authorization)
+
     user = await supabase_auth_user(auth)
 
     parent_profile_id = user.get("id")
@@ -674,7 +746,8 @@ async def claim_parent_invitation(
             "code": f"eq.{code}",
             "used_at": "is.null",
             "select": (
-                "id,student_profile_id,"
+                "id,"
+                "student_profile_id,"
                 "expires_at"
             ),
             "limit": "1",
@@ -721,7 +794,10 @@ async def claim_parent_invitation(
                 f"eq.{parent_profile_id}"
             ),
             "student_profile_id": (
-                f"eq.{invitation['student_profile_id']}"
+                "eq."
+                + invitation[
+                    "student_profile_id"
+                ]
             ),
             "select": (
                 "parent_profile_id,"
@@ -735,14 +811,18 @@ async def claim_parent_invitation(
     if existing:
         raise HTTPException(
             status_code=409,
-            detail="Relationship already exists.",
+            detail=(
+                "Relationship already exists."
+            ),
         )
 
     relationship = await supabase_request(
         "POST",
         "parent_students",
         payload={
-            "parent_profile_id": parent_profile_id,
+            "parent_profile_id": (
+                parent_profile_id
+            ),
             "student_profile_id": (
                 invitation[
                     "student_profile_id"
@@ -758,7 +838,9 @@ async def claim_parent_invitation(
         "PATCH",
         "parent_invitations",
         params={
-            "id": f"eq.{invitation['id']}",
+            "id": (
+                f"eq.{invitation['id']}"
+            ),
             "used_at": "is.null",
         },
         payload={
@@ -773,7 +855,10 @@ async def claim_parent_invitation(
     if not updated:
         raise HTTPException(
             status_code=409,
-            detail="Invitation was already claimed.",
+            detail=(
+                "Invitation was already "
+                "claimed."
+            ),
         )
 
     return {
