@@ -1,14 +1,22 @@
-import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import React, { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 
-import Navbar from "../components/Navbar";
-import { apiClient } from "../api/apiClient";
+import Navbar from '../components/Navbar';
+import { apiClient } from '../api/apiClient';
+
+
+interface Subject {
+  id: number;
+  title: string;
+  description?: string | null;
+}
 
 
 interface Unit {
   id: number;
+  subject_id: number;
+  unit_number?: number | null;
   title: string;
-  unit_number?: number;
   description?: string | null;
 }
 
@@ -16,6 +24,9 @@ interface Unit {
 const SubjectPage: React.FC = () => {
   const { subjectId } =
     useParams<{ subjectId: string }>();
+
+  const [subject, setSubject] =
+    useState<Subject | null>(null);
 
   const [units, setUnits] =
     useState<Unit[]>([]);
@@ -28,43 +39,53 @@ const SubjectPage: React.FC = () => {
 
 
   useEffect(() => {
-    if (!subjectId) return;
+    if (!subjectId) {
+      setError('معرف المادة غير صالح.');
+      setLoading(false);
+      return;
+    }
 
     const id = Number(subjectId);
 
     if (!Number.isInteger(id)) {
-      setError("معرف المادة غير صالح.");
+      setError('معرف المادة غير صالح.');
       setLoading(false);
       return;
     }
 
     let active = true;
 
-    const loadUnits = async () => {
+    const loadSubject = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const data =
-          await apiClient.getUnits(id);
+        const [subjectData, unitsData] =
+          await Promise.all([
+            apiClient.getSubject(id),
+            apiClient.getUnits(id),
+          ]);
 
         if (!active) return;
 
+        setSubject(subjectData as Subject);
+
         setUnits(
-          Array.isArray(data)
-            ? (data as Unit[])
+          Array.isArray(unitsData)
+            ? (unitsData as Unit[])
             : [],
         );
       } catch (err) {
         console.error(
-          "Failed to load subject units:",
+          'Failed to load subject:',
           err,
         );
 
         if (active) {
+          setSubject(null);
           setUnits([]);
           setError(
-            "تعذر تحميل وحدات المادة.",
+            'تعذر تحميل بيانات المادة.',
           );
         }
       } finally {
@@ -74,12 +95,64 @@ const SubjectPage: React.FC = () => {
       }
     };
 
-    loadUnits();
+    loadSubject();
 
     return () => {
       active = false;
     };
   }, [subjectId]);
+
+
+  if (loading) {
+    return (
+      <div
+        className="min-h-screen bg-slate-950 text-slate-100"
+        dir="rtl"
+      >
+        <Navbar />
+
+        <main className="max-w-4xl mx-auto px-4 py-10">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
+            <p className="text-amber-400 font-bold animate-pulse">
+              جاري تحميل المادة...
+            </p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+
+  if (error || !subject) {
+    return (
+      <div
+        className="min-h-screen bg-slate-950 text-slate-100"
+        dir="rtl"
+      >
+        <Navbar />
+
+        <main className="max-w-4xl mx-auto px-4 py-10">
+          <div className="bg-slate-900 border border-red-900/50 rounded-2xl p-8 text-center">
+            <h1 className="text-xl font-black text-red-400">
+              المادة غير متاحة
+            </h1>
+
+            <p className="text-sm text-slate-400 mt-3">
+              {error ??
+                'لم يتم العثور على المادة.'}
+            </p>
+
+            <Link
+              to="/student"
+              className="inline-block mt-6 text-amber-400 hover:text-amber-300"
+            >
+              العودة للمناهج
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
 
   return (
@@ -91,93 +164,81 @@ const SubjectPage: React.FC = () => {
 
       <main className="max-w-4xl mx-auto px-4 py-8">
 
-        <div className="mb-8">
-          <Link
-            to="/student"
-            className="text-sm text-amber-400 hover:text-amber-300"
-          >
-            ← العودة للمناهج
-          </Link>
+        <Link
+          to="/student"
+          className="text-sm text-amber-400 hover:text-amber-300"
+        >
+          ← العودة للمناهج
+        </Link>
 
-          <h1 className="text-3xl font-black text-amber-400 mt-4">
-            📚 وحدات المادة
+
+        <header className="mt-5 mb-8">
+          <h1 className="text-3xl md:text-4xl font-black text-amber-400">
+            {subject.title}
           </h1>
 
-          <p className="text-sm text-slate-400 mt-2">
-            اختر الوحدة لعرض الدروس الموجودة بها.
-          </p>
-        </div>
-
-
-        {loading && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
-            <p className="text-sm text-amber-400 animate-pulse font-bold">
-              جاري تحميل الوحدات...
+          {subject.description && (
+            <p className="text-slate-300 mt-3 leading-7">
+              {subject.description}
             </p>
-          </div>
-        )}
+          )}
+        </header>
 
 
-        {!loading && error && (
-          <div className="bg-slate-900 border border-red-900/50 rounded-2xl p-8 text-center">
-            <p className="text-sm text-red-400 font-bold">
-              {error}
-            </p>
-          </div>
-        )}
+        <section>
+
+          <h2 className="text-2xl font-black mb-5">
+            📚 وحدات المادة
+          </h2>
 
 
-        {!loading &&
-          !error &&
-          units.length === 0 && (
+          {units.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
-              <p className="text-sm text-slate-400">
-                لا توجد وحدات مسجلة لهذه المادة حاليًا.
+              <p className="text-slate-400">
+                لا توجد وحدات متاحة لهذه المادة حاليًا.
               </p>
             </div>
-          )}
+          ) : (
+            <div className="grid gap-4">
 
-
-        {!loading &&
-          !error &&
-          units.length > 0 && (
-            <div className="space-y-4">
-
-              {units.map((unit, index) => (
+              {units.map((unit) => (
                 <Link
                   key={unit.id}
                   to={`/unit/${unit.id}`}
-                  className="block bg-slate-900 border border-slate-800 hover:border-amber-500/50 p-5 rounded-2xl transition-all"
+                  className="block bg-slate-900 border border-slate-800 hover:border-amber-500/50 rounded-2xl p-5 transition"
                 >
-                  <div className="flex items-center gap-4">
 
-                    <div className="w-11 h-11 shrink-0 rounded-xl bg-slate-800 border border-slate-700 text-amber-400 flex items-center justify-center font-black">
-                      {unit.unit_number ??
-                        index + 1}
-                    </div>
+                  <div className="flex items-start gap-4">
+
+                    {unit.unit_number != null && (
+                      <div className="shrink-0 w-10 h-10 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-black">
+                        {unit.unit_number}
+                      </div>
+                    )}
 
                     <div className="min-w-0">
-                      <h2 className="text-lg font-black text-slate-100">
+
+                      <h3 className="text-xl font-black text-slate-100">
                         {unit.title}
-                      </h2>
+                      </h3>
 
                       {unit.description && (
-                        <p className="text-sm text-slate-400 mt-1">
+                        <p className="text-sm text-slate-400 mt-2 leading-6">
                           {unit.description}
                         </p>
                       )}
+
                     </div>
 
-                    <span className="mr-auto text-amber-400">
-                      ◀
-                    </span>
-
                   </div>
+
                 </Link>
               ))}
 
             </div>
           )}
+
+        </section>
 
       </main>
     </div>
