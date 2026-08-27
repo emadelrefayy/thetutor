@@ -39,10 +39,12 @@ SUPABASE_AUTH_URL = (
     f"{SUPABASE_URL.rstrip('/')}/auth/v1"
 )
 
+
 app = FastAPI(
     title="The Tutor API",
     version="1.0.0",
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,6 +57,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ------------------------------------------------------------------
+# Authentication
+# ------------------------------------------------------------------
 
 
 def require_bearer(
@@ -102,6 +109,11 @@ async def supabase_auth_user(
     return response.json()
 
 
+# ------------------------------------------------------------------
+# Supabase REST
+# ------------------------------------------------------------------
+
+
 async def supabase_request(
     method: str,
     table: str,
@@ -116,7 +128,11 @@ async def supabase_request(
         bearer = f"Bearer {key}"
     else:
         key = SUPABASE_KEY
-        bearer = authorization or f"Bearer {key}"
+        bearer = (
+            authorization
+            if authorization
+            else f"Bearer {key}"
+        )
 
     headers = {
         "apikey": key,
@@ -152,13 +168,6 @@ async def supabase_request(
         return []
 
     return response.json()
-
-
-async def authenticated_user(
-    authorization: str | None,
-):
-    token = require_bearer(authorization)
-    return await supabase_auth_user(token)
 
 
 # ------------------------------------------------------------------
@@ -340,11 +349,13 @@ async def get_lesson_questions(
     result = []
 
     for link in links:
+        question_id = link["question_id"]
+
         questions = await supabase_request(
             "GET",
             "questions",
             params={
-                "id": f"eq.{link['question_id']}",
+                "id": f"eq.{question_id}",
                 "select": (
                     "id,question_type,difficulty,"
                     "prompt,metadata,source,status,"
@@ -361,9 +372,7 @@ async def get_lesson_questions(
             "GET",
             "question_options",
             params={
-                "question_id": (
-                    f"eq.{link['question_id']}"
-                ),
+                "question_id": f"eq.{question_id}",
                 "select": (
                     "id,question_id,option_key,"
                     "option_text,sort_order,metadata"
@@ -596,6 +605,12 @@ async def create_parent_invitation(
 
     created_by = user.get("id")
 
+    if not created_by:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authenticated user.",
+        )
+
     student = await supabase_request(
         "GET",
         "student_profiles",
@@ -626,7 +641,7 @@ async def create_parent_invitation(
             "code": code,
         },
         authorization=auth,
-        privileged=True,
+        privileged=False,
     )
 
     return rows[0] if rows else {}
@@ -646,6 +661,12 @@ async def claim_parent_invitation(
 
     parent_profile_id = user.get("id")
 
+    if not parent_profile_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authenticated user.",
+        )
+
     invitations = await supabase_request(
         "GET",
         "parent_invitations",
@@ -658,7 +679,6 @@ async def claim_parent_invitation(
             ),
             "limit": "1",
         },
-        authorization=auth,
         privileged=True,
     )
 
@@ -703,10 +723,12 @@ async def claim_parent_invitation(
             "student_profile_id": (
                 f"eq.{invitation['student_profile_id']}"
             ),
-            "select": "parent_profile_id",
+            "select": (
+                "parent_profile_id,"
+                "student_profile_id"
+            ),
             "limit": "1",
         },
-        authorization=auth,
         privileged=True,
     )
 
@@ -729,15 +751,15 @@ async def claim_parent_invitation(
             "relationship": "parent",
             "is_primary": False,
         },
-        authorization=auth,
         privileged=True,
     )
 
-    await supabase_request(
+    updated = await supabase_request(
         "PATCH",
         "parent_invitations",
         params={
-            "id": f"eq.{invitation['id']}"
+            "id": f"eq.{invitation['id']}",
+            "used_at": "is.null",
         },
         payload={
             "used_by": parent_profile_id,
@@ -745,9 +767,14 @@ async def claim_parent_invitation(
                 timezone.utc
             ).isoformat(),
         },
-        authorization=auth,
         privileged=True,
     )
+
+    if not updated:
+        raise HTTPException(
+            status_code=409,
+            detail="Invitation was already claimed.",
+        )
 
     return {
         "status": "success",
