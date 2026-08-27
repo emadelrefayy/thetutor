@@ -1,183 +1,198 @@
-import os
-import re
 import json
+import os
 import sys
-import socket
-import requests
-import dns.resolver
-from supabase import create_client, Client
+from pathlib import Path
 
-sys.stdout.reconfigure(encoding='utf-8')
+import httpx
+from dotenv import load_dotenv
 
-# --- إجبار بيئة Python على استخدام Google DNS مباشرة ---
-def custom_resolver(domain):
-    resolver = dns.resolver.Resolver()
-    resolver.nameservers = ['8.8.8.8', '1.1.1.1']
-    try:
-        answers = resolver.resolve(domain, 'A')
-        return answers[0].to_text()
-    except Exception as e:
-        print(f"⚠️ DNS Custom Resolve Failed for {domain}: {e}")
-        return None
+load_dotenv()
 
-# إصلاح الاتصال بـ Supabase و OpenRouter تلقائياً
-print("🔍 جاري فحص وتوجيه الـ DNS من داخل Python...")
-supabase_domain = "xsfjlzneykogdltuiwno.supabase.co"
-openrouter_domain = "openrouter.ai"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
-supabase_ip = custom_resolver(supabase_domain)
-openrouter_ip = custom_resolver(openrouter_domain)
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise RuntimeError(
+        "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment."
+    )
 
-if supabase_ip:
-    print(f"✅ Supabase Resolved -> {supabase_ip}")
-if openrouter_ip:
-    print(f"✅ OpenRouter Resolved -> {openrouter_ip}")
+BASE_URL = f"{SUPABASE_URL.rstrip('/')}/rest/v1"
 
-# --- البيانات والاعتمادات ---
-SUPABASE_URL = "https://xsfjlzneykogdltuiwno.supabase.co"
-SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-OPENROUTER_API_KEY = os.environ["OPENROUTER_API_KEY"]
+HEADERS = {
+    "apikey": SUPABASE_KEY,
+    "Authorization": f"Bearer {SUPABASE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation",
+}
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def call_openrouter(prompt_text):
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "HTTP-Referer": "https://thetutor.app",
-        "X-Title": "TheTutor App",
-        "Content-Type": "application/json"
-    }
+def load_json(path: str) -> dict:
+    file_path = Path(path)
 
+    if not file_path.exists():
+        raise FileNotFoundError(f"Input file not found: {file_path}")
+
+    with file_path.open("r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+async def insert_question(client: httpx.AsyncClient, question: dict) -> dict:
     payload = {
-        "model": "openrouter/free",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a JSON generator. Output ONLY a raw JSON object. Do not add markdown backticks, no code blocks, and no thinking text."
-            },
-            {"role": "user", "content": prompt_text}
-        ]
+        "question_type": question.get("question_type", "multiple_choice"),
+        "difficulty": question.get("difficulty"),
+        "prompt": question["prompt"],
+        "explanation": question.get("explanation"),
+        "correct_answer": question.get("correct_answer"),
+        "metadata": question.get("metadata", {}),
+        "source": question.get("source", "content_injector"),
+        "status": question.get("status", "draft"),
+        "skill_type": question.get("skill_type"),
+        "generation_source": question.get(
+            "generation_source",
+            "manual",
+        ),
     }
 
-    res = requests.post(url, headers=headers, json=payload, timeout=60)
-    if res.status_code == 200:
-        res_data = res.json()
-        if 'choices' in res_data and len(res_data['choices']) > 0:
-            content = res_data['choices'][0]['message']['content']
-            if content and len(content.strip()) > 0:
-                return content
-    
-    raise Exception(f"OpenRouter Call Failed. Status: {res.status_code}, Response: {res.text}")
+    response = await client.post(
+        f"{BASE_URL}/questions",
+        headers=HEADERS,
+        json=payload,
+    )
 
-def clean_and_parse_json(raw_text):
-    text = re.sub(r'<think>.*?</think>', '', raw_text, flags=re.DOTALL)
-    text = re.sub(r'```json\s*|\s*```', '', text).strip()
-    
-    start_idx = text.find('{')
-    end_idx = text.rfind('}')
-    
-    if start_idx != -1 and end_idx != -1:
-        text = text[start_idx:end_idx+1]
+    response.raise_for_status()
+    rows = response.json()
 
-    return json.loads(text, strict=False)
+    if not rows:
+        raise RuntimeError("Supabase returned no question after insert.")
 
-def run_injector():
-    md_path = "master_lessons.md"
-    if not os.path.exists(md_path):
-        print(f"Error: {md_path} not found.")
+    return rows[0]
+
+
+async def insert_options(
+    client: httpx.AsyncClient,
+    question_id: str,
+    options: list[dict],
+) -> None:
+    if not options:
         return
 
-    with open(md_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+    payload = []
 
-    full_text = "".join(lines)
-    instructions = full_text.split("# LESSONS MANIFEST")[0]
+    for index, option in enumerate(options):
+        payload.append(
+            {
+                "question_id": question_id,
+                "option_key": option.get(
+                    "option_key",
+                    chr(65 + index),
+                ),
+                "option_text": option["option_text"],
+                "is_correct": bool(option.get("is_correct", False)),
+                "sort_order": option.get("sort_order", index),
+                "metadata": option.get("metadata", {}),
+            }
+        )
 
-    for idx, line in enumerate(lines):
-        if line.strip().startswith("- [ ]"):
-            print(f"🚀 Processing Lesson: {line.strip()}")
+    response = await client.post(
+        f"{BASE_URL}/question_options",
+        headers=HEADERS,
+        json=payload,
+    )
 
-            lesson_id = re.search(r"ID:\s*(\d+)", line).group(1)
-            subj_id = re.search(r"Subj:\s*(\d+)", line).group(1)
-            unit_num = re.search(r"Unit:\s*(\d+)", line).group(1)
-            les_num = re.search(r"Les:\s*(\d+)", line).group(1)
-            title = re.search(r"Title:\s*([^|]+)", line).group(1).strip()
-            vid_url = re.search(r"Vid:\s*([^|]+)", line).group(1).strip()
-            info_img = re.search(r"InfoImg:\s*([^\s]+)", line).group(1).strip()
+    response.raise_for_status()
 
-            prompt = f"""
-            {instructions}
 
-            Target Lesson Details:
-            - Lesson Title: {title}
-            - Unit Number: {unit_num}
-            - Lesson Number: {les_num}
+async def link_question_to_lesson(
+    client: httpx.AsyncClient,
+    question_id: str,
+    lesson_id: int,
+    relevance: float = 1.0,
+) -> None:
+    payload = {
+        "question_id": question_id,
+        "lesson_id": lesson_id,
+        "relevance": relevance,
+    }
 
-            Return ONLY valid JSON with this exact schema:
-            {{
-                "mental_hook": "Engaging sentence",
-                "explanation_text": "Detailed lesson body (150-200 words)",
-                "memory_anchor": "Catchy memory mnemonic",
-                "quizzes": [
-                    {{
-                        "question": "Question text",
-                        "options": ["Opt1", "Opt2", "Opt3", "Opt4"],
-                        "correct_option": 0,
-                        "difficulty": "easy",
-                        "explanation": "Educational reason"
-                    }}
-                ]
-            }}
-            """
+    response = await client.post(
+        f"{BASE_URL}/question_lessons",
+        headers=HEADERS,
+        json=payload,
+    )
 
-            try:
-                raw_content = call_openrouter(prompt)
-                data = clean_and_parse_json(raw_content)
+    response.raise_for_status()
 
-                full_summary = (
-                    f"### Mental Hook\n{data['mental_hook']}\n\n"
-                    f"### Lesson Explanation\n{data['explanation_text']}\n\n"
-                    f"![Infographic]({info_img})\n\n"
-                    f"### Memory Anchor\n{data['memory_anchor']}"
+
+async def inject_questions(
+    input_path: str,
+    lesson_id: int | None = None,
+) -> None:
+    data = load_json(input_path)
+
+    questions = data.get("questions", [])
+
+    if not isinstance(questions, list):
+        raise ValueError("'questions' must be a list.")
+
+    if lesson_id is None:
+        lesson_id = data.get("lesson_id")
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        for index, question in enumerate(questions, start=1):
+            if "prompt" not in question:
+                raise ValueError(
+                    f"Question #{index} is missing 'prompt'."
                 )
 
-                lesson_payload = {
-                    "id": int(lesson_id),
-                    "subject_id": int(subj_id),
-                    "unit_number": int(unit_num),
-                    "lesson_number": int(les_num),
-                    "title": title,
-                    "content_summary": full_summary,
-                    "video_url": vid_url,
-                    "game_url": f"/games/lesson/{lesson_id}"
-                }
-                supabase.table("lessons").upsert(lesson_payload).execute()
+            created = await insert_question(client, question)
 
-                for q in data['quizzes']:
-                    quiz_payload = {
-                        "lesson_id": int(lesson_id),
-                        "question": q['question'],
-                        "options": {
-                            "choices": q['options'],
-                            "difficulty": q['difficulty'],
-                            "explanation": q['explanation']
-                        },
-                        "correct_option": q['correct_option']
-                    }
-                    supabase.table("quizzes").insert(quiz_payload).execute()
+            await insert_options(
+                client,
+                created["id"],
+                question.get("options", []),
+            )
 
-                lines[idx] = line.replace("- [ ]", "- [x]", 1)
-                with open(md_path, "w", encoding="utf-8") as f:
-                    f.writelines(lines)
-                
-                print(f"✅ SUCCESS: Injected Lesson ID: {lesson_id}\n")
+            question_lesson_id = question.get(
+                "lesson_id",
+                lesson_id,
+            )
 
-            except Exception as e:
-                import traceback
-                print(f"❌ ERROR processing lesson {lesson_id}:")
-                traceback.print_exc()
-                break
+            if question_lesson_id is not None:
+                await link_question_to_lesson(
+                    client,
+                    created["id"],
+                    int(question_lesson_id),
+                    float(question.get("relevance", 1.0)),
+                )
+
+            print(
+                f"Inserted question {index}/{len(questions)}: "
+                f"{created['id']}"
+            )
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print(
+            "Usage: python injector.py <json_file> [lesson_id]"
+        )
+        sys.exit(1)
+
+    input_path = sys.argv[1]
+
+    lesson_id = None
+    if len(sys.argv) >= 3:
+        lesson_id = int(sys.argv[2])
+
+    import asyncio
+
+    asyncio.run(
+        inject_questions(
+            input_path,
+            lesson_id,
+        )
+    )
+
 
 if __name__ == "__main__":
-    run_injector()
+    main()
