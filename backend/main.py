@@ -1400,44 +1400,7 @@ async def get_student_achievements(
 
 # =====================================================================
 # Games
-# =====================================================================
-
-@app.get("/api/games")
-async def get_games(
-    lesson_id: int | None = Query(default=None),
-):
-    params = {
-        "select": (
-            "id,lesson_id,game_type,title,"
-            "game_data,created_at"
-        ),
-        "order": "id.asc",
-    }
-
-    if lesson_id is not None:
-        params["lesson_id"] = f"eq.{lesson_id}"
-
-    return await supabase_request(
-        "GET",
-        "games",
-        params=params,
-    )
-
-
-@app.get("/api/lessons/{lesson_id}/games")
-async def get_lesson_games(lesson_id: int):
-    return await supabase_request(
-        "GET",
-        "games",
-        params={
-            "lesson_id": f"eq.{lesson_id}",
-            "select": (
-                "id,lesson_id,game_type,title,"
-                "game_data,created_at"
-            ),
-            "order": "id.asc",
-        },
-    )
+# ==================================================================
 
 
 @app.get("/api/game-templates")
