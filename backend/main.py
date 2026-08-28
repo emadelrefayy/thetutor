@@ -241,7 +241,7 @@ async def get_grades():
         params={
             "select": (
                 "id,"
-                "title,"
+                "name:title,"
                 "level_code,"
                 "code,"
                 "created_at"
@@ -251,9 +251,7 @@ async def get_grades():
     )
 
 
-@app.get(
-    "/api/grades/{grade_id}/terms"
-)
+@app.get("/api/grades/{grade_id}/terms")
 async def get_grade_terms(
     grade_id: int,
 ):
@@ -264,7 +262,7 @@ async def get_grade_terms(
             "grade_id": f"eq.{grade_id}",
             "select": (
                 "id,"
-                "title,"
+                "name:title,"
                 "code,"
                 "grade_id,"
                 "created_at"
@@ -274,9 +272,7 @@ async def get_grade_terms(
     )
 
 
-@app.get(
-    "/api/terms/{term_id}/subjects"
-)
+@app.get("/api/terms/{term_id}/subjects")
 async def get_term_subjects(
     term_id: int,
 ):
@@ -285,23 +281,13 @@ async def get_term_subjects(
         "subjects",
         params={
             "term_id": f"eq.{term_id}",
-            "select": (
-                "id,"
-                "term_id,"
-                "title,"
-                "code,"
-                "icon_name,"
-                "color_theme,"
-                "created_at"
-            ),
+            "select": "*",
             "order": "id.asc",
         },
     )
 
 
-@app.get(
-    "/api/subjects/{subject_id}"
-)
+@app.get("/api/subjects/{subject_id}")
 async def get_subject(
     subject_id: int,
 ):
@@ -310,15 +296,7 @@ async def get_subject(
         "subjects",
         params={
             "id": f"eq.{subject_id}",
-            "select": (
-                "id,"
-                "term_id,"
-                "title,"
-                "code,"
-                "icon_name,"
-                "color_theme,"
-                "created_at"
-            ),
+            "select": "*",
             "limit": "1",
         },
     )
@@ -332,9 +310,7 @@ async def get_subject(
     return rows[0]
 
 
-@app.get(
-    "/api/subjects/{subject_id}/units"
-)
+@app.get("/api/subjects/{subject_id}/units")
 async def get_subject_units(
     subject_id: int,
 ):
@@ -343,54 +319,13 @@ async def get_subject_units(
         "units",
         params={
             "subject_id": f"eq.{subject_id}",
-            "select": (
-                "id,"
-                "subject_id,"
-                "unit_number,"
-                "title,"
-                "description,"
-                "created_at"
-            ),
+            "select": "*",
             "order": "unit_number.asc",
         },
     )
 
 
-@app.get(
-    "/api/units/{unit_id}"
-)
-async def get_unit(
-    unit_id: int,
-):
-    rows = await supabase_request(
-        "GET",
-        "units",
-        params={
-            "id": f"eq.{unit_id}",
-            "select": (
-                "id,"
-                "subject_id,"
-                "unit_number,"
-                "title,"
-                "description,"
-                "created_at"
-            ),
-            "limit": "1",
-        },
-    )
-
-    if not rows:
-        raise HTTPException(
-            status_code=404,
-            detail="Unit not found.",
-        )
-
-    return rows[0]
-
-
-@app.get(
-    "/api/units/{unit_id}/lessons"
-)
+@app.get("/api/units/{unit_id}/lessons")
 async def get_unit_lessons(
     unit_id: int,
 ):
@@ -399,27 +334,13 @@ async def get_unit_lessons(
         "lessons",
         params={
             "unit_id": f"eq.{unit_id}",
-            "select": (
-                "id,"
-                "subject_id,"
-                "unit_id,"
-                "title,"
-                "unit_number,"
-                "lesson_number,"
-                "content_summary,"
-                "video_url,"
-                "infographic_url,"
-                "game_url,"
-                "created_at"
-            ),
+            "select": "*",
             "order": "lesson_number.asc",
         },
     )
 
 
-@app.get(
-    "/api/lessons/{lesson_id}"
-)
+@app.get("/api/lessons/{lesson_id}")
 async def get_lesson(
     lesson_id: int,
 ):
@@ -428,19 +349,7 @@ async def get_lesson(
         "lessons",
         params={
             "id": f"eq.{lesson_id}",
-            "select": (
-                "id,"
-                "subject_id,"
-                "unit_id,"
-                "title,"
-                "unit_number,"
-                "lesson_number,"
-                "content_summary,"
-                "video_url,"
-                "infographic_url,"
-                "game_url,"
-                "created_at"
-            ),
+            "select": "*",
             "limit": "1",
         },
     )
@@ -470,16 +379,7 @@ async def get_lesson_content(
         params={
             "lesson_id": f"eq.{lesson_id}",
             "is_published": "eq.true",
-            "select": (
-                "id,"
-                "lesson_id,"
-                "block_type,"
-                "content,"
-                "asset_id,"
-                "sort_order,"
-                "is_published,"
-                "created_at"
-            ),
+            "select": "*",
             "order": "sort_order.asc",
         },
     )
@@ -497,126 +397,10 @@ async def get_lesson_assets(
         params={
             "lesson_id": f"eq.{lesson_id}",
             "is_published": "eq.true",
-            "select": (
-                "id,"
-                "lesson_id,"
-                "asset_type,"
-                "title,"
-                "url,"
-                "storage_path,"
-                "alt_text,"
-                "metadata,"
-                "sort_order,"
-                "is_published,"
-                "created_at"
-            ),
+            "select": "*",
             "order": "sort_order.asc",
         },
     )
-
-
-@app.get(
-    "/api/lessons/{lesson_id}/vocabulary"
-)
-async def get_lesson_vocabulary(
-    lesson_id: int,
-):
-    return await supabase_request(
-        "GET",
-        "lesson_vocabulary",
-        params={
-            "lesson_id": f"eq.{lesson_id}",
-            "select": (
-                "id,"
-                "lesson_id,"
-                "term,"
-                "definition,"
-                "pronunciation,"
-                "example,"
-                "created_at"
-            ),
-            "order": "id.asc",
-        },
-    )
-
-
-@app.get(
-    "/api/lessons/{lesson_id}/objectives"
-)
-async def get_lesson_objectives(
-    lesson_id: int,
-):
-    return await supabase_request(
-        "GET",
-        "learning_objectives",
-        params={
-            "lesson_id": f"eq.{lesson_id}",
-            "select": (
-                "id,"
-                "lesson_id,"
-                "objective_code,"
-                "statement,"
-                "cognitive_level,"
-                "created_at"
-            ),
-            "order": "id.asc",
-        },
-    )
-
-
-@app.get(
-    "/api/lessons/{lesson_id}/concepts"
-)
-async def get_lesson_concepts(
-    lesson_id: int,
-):
-    links = await supabase_request(
-        "GET",
-        "lesson_concepts",
-        params={
-            "lesson_id": f"eq.{lesson_id}",
-            "select": (
-                "lesson_id,"
-                "concept_id,"
-                "is_primary,"
-                "created_at"
-            ),
-            "order": "is_primary.desc",
-        },
-    )
-
-    result = []
-
-    for link in links:
-        concepts = await supabase_request(
-            "GET",
-            "concepts",
-            params={
-                "id": (
-                    f"eq.{link['concept_id']}"
-                ),
-                "select": (
-                    "id,"
-                    "subject_id,"
-                    "name,"
-                    "description,"
-                    "created_at"
-                ),
-                "limit": "1",
-            },
-        )
-
-        if not concepts:
-            continue
-
-        concept = concepts[0]
-        concept["is_primary"] = (
-            link.get("is_primary", False)
-        )
-
-        result.append(concept)
-
-    return result
 
 
 # ------------------------------------------------------------------
@@ -634,10 +418,7 @@ async def get_lesson_questions(
         "question_lessons",
         params={
             "lesson_id": f"eq.{lesson_id}",
-            "select": (
-                "question_id,"
-                "relevance"
-            ),
+            "select": "question_id,relevance",
             "order": "relevance.desc",
         },
     )
@@ -658,8 +439,6 @@ async def get_lesson_questions(
                     "question_type,"
                     "difficulty,"
                     "prompt,"
-                    "explanation,"
-                    "correct_answer,"
                     "metadata,"
                     "source,"
                     "status,"
@@ -722,8 +501,6 @@ async def get_question(
                 "question_type,"
                 "difficulty,"
                 "prompt,"
-                "explanation,"
-                "correct_answer,"
                 "metadata,"
                 "source,"
                 "status,"
@@ -768,10 +545,15 @@ async def get_question(
 # Student
 # ------------------------------------------------------------------
 
-async def require_student(
+@app.get(
+    "/api/students/{student_profile_id}"
+)
+async def get_student(
     student_profile_id: str,
-    authorization: str | None,
-) -> str:
+    authorization: str | None = Header(
+        default=None
+    ),
+):
     auth = require_bearer(authorization)
 
     user = await supabase_auth_user(auth)
@@ -782,23 +564,6 @@ async def require_student(
             detail="Access denied.",
         )
 
-    return auth
-
-
-@app.get(
-    "/api/students/{student_profile_id}"
-)
-async def get_student(
-    student_profile_id: str,
-    authorization: str | None = Header(
-        default=None
-    ),
-):
-    auth = await require_student(
-        student_profile_id,
-        authorization,
-    )
-
     rows = await supabase_request(
         "GET",
         "student_profiles",
@@ -806,18 +571,7 @@ async def get_student(
             "profile_id": (
                 f"eq.{student_profile_id}"
             ),
-            "select": (
-                "profile_id,"
-                "grade_id,"
-                "display_name,"
-                "date_of_birth,"
-                "avatar_url,"
-                "xp,"
-                "level,"
-                "is_active,"
-                "created_at,"
-                "updated_at"
-            ),
+            "select": "*",
             "limit": "1",
         },
         authorization=auth,
@@ -841,10 +595,15 @@ async def get_student_progress(
         default=None
     ),
 ):
-    auth = await require_student(
-        student_profile_id,
-        authorization,
-    )
+    auth = require_bearer(authorization)
+
+    user = await supabase_auth_user(auth)
+
+    if user.get("id") != student_profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied.",
+        )
 
     return await supabase_request(
         "GET",
@@ -853,18 +612,7 @@ async def get_student_progress(
             "student_profile_id": (
                 f"eq.{student_profile_id}"
             ),
-            "select": (
-                "id,"
-                "student_profile_id,"
-                "lesson_id,"
-                "status,"
-                "completion_percent,"
-                "first_started_at,"
-                "completed_at,"
-                "last_accessed_at,"
-                "time_spent_seconds,"
-                "updated_at"
-            ),
+            "select": "*",
             "order": "updated_at.desc",
         },
         authorization=auth,
@@ -880,10 +628,15 @@ async def get_student_analytics(
         default=None
     ),
 ):
-    auth = await require_student(
-        student_profile_id,
-        authorization,
-    )
+    auth = require_bearer(authorization)
+
+    user = await supabase_auth_user(auth)
+
+    if user.get("id") != student_profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied.",
+        )
 
     metrics = await supabase_request(
         "GET",
@@ -893,7 +646,6 @@ async def get_student_analytics(
                 f"eq.{student_profile_id}"
             ),
             "select": "*",
-            "order": "updated_at.desc",
         },
         authorization=auth,
     )
@@ -906,7 +658,6 @@ async def get_student_analytics(
                 f"eq.{student_profile_id}"
             ),
             "select": "*",
-            "order": "updated_at.desc",
         },
         authorization=auth,
     )
@@ -930,64 +681,6 @@ async def get_student_analytics(
         "concept_mastery": mastery,
         "recommendations": recommendations,
     }
-
-
-# ------------------------------------------------------------------
-# Student Learning Events
-# ------------------------------------------------------------------
-
-@app.post(
-    "/api/students/{student_profile_id}/events"
-)
-async def create_learning_event(
-    student_profile_id: str,
-    event: dict,
-    authorization: str | None = Header(
-        default=None
-    ),
-):
-    auth = await require_student(
-        student_profile_id,
-        authorization,
-    )
-
-    payload = {
-        "student_profile_id": student_profile_id,
-        "event_type": event.get(
-            "event_type"
-        ),
-        "lesson_id": event.get(
-            "lesson_id"
-        ),
-        "concept_id": event.get(
-            "concept_id"
-        ),
-        "metadata": event.get(
-            "metadata",
-            {},
-        ),
-        "occurred_at": event.get(
-            "occurred_at"
-        ),
-    }
-
-    if not payload["event_type"]:
-        raise HTTPException(
-            status_code=400,
-            detail="event_type is required.",
-        )
-
-    if not payload["occurred_at"]:
-        payload.pop("occurred_at")
-
-    rows = await supabase_request(
-        "POST",
-        "learning_events",
-        payload=payload,
-        authorization=auth,
-    )
-
-    return rows[0] if rows else {}
 
 
 # ------------------------------------------------------------------
