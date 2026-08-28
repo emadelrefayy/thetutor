@@ -1,11 +1,27 @@
+import { supabase } from "../lib/supabase";
+
+/* =====================================================================
+ * Configuration
+ * ===================================================================== */
+
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '') ||
-  'http://localhost:8000/api';
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") ||
+  "http://localhost:8000/api";
+
+/* =====================================================================
+ * Shared Types
+ * ===================================================================== */
 
 export interface ApiError {
   status: number;
   message: string;
   details?: unknown;
+}
+
+export interface HealthResponse {
+  service?: string;
+  status?: string;
+  version?: string;
 }
 
 export interface Grade {
@@ -68,17 +84,19 @@ export interface LessonContentBlock {
   created_at?: string | null;
 }
 
+export type LessonAssetType =
+  | "image"
+  | "infographic"
+  | "video"
+  | "audio"
+  | "document"
+  | "game"
+  | "external";
+
 export interface LessonAsset {
   id: string;
   lesson_id: number;
-  asset_type:
-    | 'image'
-    | 'infographic'
-    | 'video'
-    | 'audio'
-    | 'document'
-    | 'game'
-    | 'external';
+  asset_type: LessonAssetType;
   title?: string | null;
   url: string;
   storage_path?: string | null;
@@ -120,15 +138,17 @@ export interface LessonConcept extends Concept {
   is_primary?: boolean;
 }
 
+export type CurriculumSourceType =
+  | "official"
+  | "licensed"
+  | "teacher_created"
+  | "ai_generated"
+  | "other";
+
 export interface CurriculumSource {
   id: string;
   name: string;
-  source_type:
-    | 'official'
-    | 'licensed'
-    | 'teacher_created'
-    | 'ai_generated'
-    | 'other';
+  source_type: CurriculumSourceType;
   publisher?: string | null;
   source_url?: string | null;
   edition?: string | null;
@@ -146,22 +166,25 @@ export interface QuestionOption {
   question_id: string;
   option_key: string;
   option_text: string;
+  is_correct?: boolean;
   sort_order: number;
   metadata?: Record<string, unknown> | null;
 }
 
+export type QuestionType =
+  | "multiple_choice"
+  | "true_false"
+  | "matching"
+  | "ordering"
+  | "fill_blank"
+  | "short_answer"
+  | "image_choice"
+  | "drag_drop"
+  | string;
+
 export interface Question {
   id: string;
-  question_type:
-    | 'multiple_choice'
-    | 'true_false'
-    | 'matching'
-    | 'ordering'
-    | 'fill_blank'
-    | 'short_answer'
-    | 'image_choice'
-    | 'drag_drop'
-    | string;
+  question_type: QuestionType;
   difficulty?: string | null;
   prompt: string;
   explanation?: string | null;
@@ -195,9 +218,9 @@ export interface LessonProgress {
   student_profile_id: string;
   lesson_id: number;
   status:
-    | 'not_started'
-    | 'in_progress'
-    | 'completed'
+    | "not_started"
+    | "in_progress"
+    | "completed"
     | string;
   completion_percent: number;
   first_started_at?: string | null;
@@ -245,12 +268,12 @@ export interface LearningRecommendation {
   id: string;
   student_profile_id: string;
   recommendation_type:
-    | 'lesson'
-    | 'concept'
-    | 'practice'
-    | 'vocabulary'
-    | 'game'
-    | 'course'
+    | "lesson"
+    | "concept"
+    | "practice"
+    | "vocabulary"
+    | "game"
+    | "course"
     | string;
   lesson_id?: number | null;
   concept_id?: number | null;
@@ -340,7 +363,6 @@ export interface ParentStudent {
   relationship?: string | null;
   is_primary: boolean;
   created_at?: string | null;
-
   grade_id?: number | null;
   xp?: number | null;
   level?: number | null;
@@ -351,6 +373,10 @@ export interface ParentStudent {
   correct_answers?: number | null;
   accuracy_percent?: number | null;
 }
+
+/* =====================================================================
+ * Gamification / Games
+ * ===================================================================== */
 
 export interface Game {
   id: number;
@@ -379,11 +405,11 @@ export interface GameDefinition {
   id: string;
   template_id: string;
   scope_type:
-    | 'lesson'
-    | 'unit'
-    | 'subject'
-    | 'course'
-    | 'challenge';
+    | "lesson"
+    | "unit"
+    | "subject"
+    | "course"
+    | "challenge";
   lesson_id?: number | null;
   unit_id?: number | null;
   subject_id?: number | null;
@@ -411,9 +437,9 @@ export interface GameSession {
   started_at?: string | null;
   completed_at?: string | null;
   status:
-    | 'started'
-    | 'completed'
-    | 'abandoned'
+    | "started"
+    | "completed"
+    | "abandoned"
     | string;
   score: number;
   max_score: number;
@@ -451,11 +477,11 @@ export interface Challenge {
   starts_at: string;
   ends_at: string;
   status:
-    | 'draft'
-    | 'scheduled'
-    | 'live'
-    | 'finished'
-    | 'cancelled'
+    | "draft"
+    | "scheduled"
+    | "live"
+    | "finished"
+    | "cancelled"
     | string;
   settings: Record<string, unknown>;
   created_at?: string | null;
@@ -477,6 +503,10 @@ export interface ChallengeParticipant {
   score: number;
   rank?: number | null;
 }
+
+/* =====================================================================
+ * Courses / Messaging
+ * ===================================================================== */
 
 export interface Course {
   id: string;
@@ -516,9 +546,9 @@ export interface CourseEnrollment {
   course_id: string;
   student_profile_id: string;
   status:
-    | 'active'
-    | 'completed'
-    | 'cancelled'
+    | "active"
+    | "completed"
+    | "cancelled"
     | string;
   enrolled_at?: string | null;
   completed_at?: string | null;
@@ -527,9 +557,9 @@ export interface CourseEnrollment {
 export interface Conversation {
   id: string;
   conversation_type:
-    | 'direct'
-    | 'group'
-    | 'challenge'
+    | "direct"
+    | "group"
+    | "challenge"
     | string;
   title?: string | null;
   created_at?: string | null;
@@ -542,98 +572,316 @@ export interface Message {
   sender_id: string;
   body: string;
   message_type:
-    | 'text'
-    | 'result_share'
-    | 'system'
+    | "text"
+    | "result_share"
+    | "system"
     | string;
   metadata: Record<string, unknown>;
   created_at?: string | null;
 }
 
+/* =====================================================================
+ * Admin Types
+ * ===================================================================== */
+
+export interface AdminProfile {
+  id: string;
+  name: string;
+  role: "admin" | "super_admin" | string;
+  grade_id?: number | null;
+  created_at?: string | null;
+}
+
+export interface AdminContentOverview {
+  grades: number;
+  terms: number;
+  subjects: number;
+  units: number;
+  lessons: number;
+  lesson_content_blocks: number;
+  lesson_assets: number;
+  learning_objectives: number;
+  lesson_vocabulary: number;
+  concepts: number;
+  questions: number;
+  curriculum_sources: number;
+  game_templates: number;
+  game_definitions: number;
+}
+
+export interface AdminLessonCreateInput {
+  subject_id: number;
+  unit_id: number;
+  unit_number: number;
+  lesson_number: number;
+  title: string;
+  content_summary?: string;
+  video_url?: string;
+  infographic_url?: string;
+  game_url?: string;
+}
+
+export interface AdminLessonUpdateInput {
+  subject_id?: number;
+  unit_id?: number;
+  unit_number?: number;
+  lesson_number?: number;
+  title?: string;
+  content_summary?: string;
+  video_url?: string;
+  infographic_url?: string;
+  game_url?: string;
+}
+
+export interface AdminContentBlockCreateInput {
+  lesson_id: number;
+  block_type: string;
+  content?: Record<string, unknown>;
+  asset_id?: string | null;
+  sort_order?: number;
+  is_published?: boolean;
+}
+
+export interface AdminContentBlockUpdateInput {
+  block_type?: string;
+  content?: Record<string, unknown>;
+  asset_id?: string | null;
+  sort_order?: number;
+  is_published?: boolean;
+}
+
+export interface AdminAssetCreateInput {
+  lesson_id: number;
+  asset_type: LessonAssetType;
+  title?: string | null;
+  url: string;
+  storage_path?: string | null;
+  alt_text?: string | null;
+  metadata?: Record<string, unknown>;
+  sort_order?: number;
+  is_published?: boolean;
+}
+
+export interface AdminAssetUpdateInput {
+  asset_type?: LessonAssetType;
+  title?: string | null;
+  url?: string;
+  storage_path?: string | null;
+  alt_text?: string | null;
+  metadata?: Record<string, unknown>;
+  sort_order?: number;
+  is_published?: boolean;
+}
+
+export interface AdminObjectiveCreateInput {
+  lesson_id: number;
+  objective_code?: string | null;
+  statement: string;
+  cognitive_level?: string | null;
+}
+
+export interface AdminObjectiveUpdateInput {
+  objective_code?: string | null;
+  statement?: string;
+  cognitive_level?: string | null;
+}
+
+export interface AdminVocabularyCreateInput {
+  lesson_id: number;
+  term: string;
+  definition?: string | null;
+  pronunciation?: string | null;
+  example?: string | null;
+}
+
+export interface AdminVocabularyUpdateInput {
+  term?: string;
+  definition?: string | null;
+  pronunciation?: string | null;
+  example?: string | null;
+}
+
+export interface AdminConceptCreateInput {
+  subject_id: number;
+  name: string;
+  description?: string | null;
+}
+
+export interface AdminConceptUpdateInput {
+  name?: string;
+  description?: string | null;
+}
+
+export interface AdminSourceCreateInput {
+  name: string;
+  source_type: CurriculumSourceType;
+  publisher?: string | null;
+  source_url?: string | null;
+  edition?: string | null;
+  academic_year?: string | null;
+  language?: string;
+  rights_notes?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AdminSourceUpdateInput {
+  name?: string;
+  source_type?: CurriculumSourceType;
+  publisher?: string | null;
+  source_url?: string | null;
+  edition?: string | null;
+  academic_year?: string | null;
+  language?: string;
+  rights_notes?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AdminQuestionOptionInput {
+  option_key: string;
+  option_text: string;
+  is_correct?: boolean;
+  sort_order?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AdminQuestionCreateInput {
+  question_type: string;
+  difficulty?: string;
+  prompt: string;
+  explanation?: string | null;
+  correct_answer?: unknown;
+  metadata?: Record<string, unknown>;
+  source?: "manual" | "ai" | "imported" | string;
+  status?:
+    | "draft"
+    | "review"
+    | "approved"
+    | "published"
+    | "archived"
+    | string;
+  skill_type?: string | null;
+  generation_source?: string | null;
+  lesson_ids?: number[];
+  options?: AdminQuestionOptionInput[];
+}
+
+export interface AdminQuestionUpdateInput {
+  question_type?: string;
+  difficulty?: string;
+  prompt?: string;
+  explanation?: string | null;
+  correct_answer?: unknown;
+  metadata?: Record<string, unknown>;
+  source?: string;
+  status?: string;
+  skill_type?: string | null;
+  generation_source?: string | null;
+  lesson_ids?: number[];
+  options?: AdminQuestionOptionInput[];
+}
+
+export interface AdminQuestionRecord extends Question {
+  correct_answer?: unknown;
+  lessons?: Array<{
+    question_id: string;
+    lesson_id: number;
+    relevance: number;
+  }>;
+}
+
+/* =====================================================================
+ * Request Helpers
+ * ===================================================================== */
+
+type QueryValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined;
+
 interface RequestOptions extends RequestInit {
   token?: string | null;
+  query?: Record<string, QueryValue>;
 }
 
 function buildUrl(
   path: string,
-  query?: Record<
-    string,
-    string | number | boolean | null | undefined
-  >,
+  query?: Record<string, QueryValue>,
 ): string {
-  const normalizedPath = path.startsWith('/')
+  const normalizedPath = path.startsWith("/")
     ? path
     : `/${path}`;
 
-  const url = `${API_BASE_URL}${normalizedPath}`;
-
-  if (!query) {
-    return url;
-  }
-
-  const params = new URLSearchParams();
-
-  Object.entries(query).forEach(
-    ([key, value]) => {
-      if (
-        value !== undefined &&
-        value !== null
-      ) {
-        params.set(key, String(value));
-      }
-    },
+  const url = new URL(
+    `${API_BASE_URL}${normalizedPath}`,
+    window.location.origin,
   );
 
-  const queryString = params.toString();
+  if (query) {
+    Object.entries(query).forEach(
+      ([key, value]) => {
+        if (
+          value !== undefined &&
+          value !== null
+        ) {
+          url.searchParams.set(
+            key,
+            String(value),
+          );
+        }
+      },
+    );
+  }
 
-  return queryString
-    ? `${url}?${queryString}`
-    : url;
+  return url.toString();
 }
 
-function getStoredToken(): string | null {
-  const possibleKeys = [
-    'access_token',
-    'supabase_access_token',
-    'supabase.auth.token',
-  ];
+async function resolveAccessToken(
+  explicitToken?: string | null,
+): Promise<string | null> {
+  if (explicitToken !== undefined) {
+    const normalized = explicitToken.trim();
 
-  for (const key of possibleKeys) {
-    const value = localStorage.getItem(key);
-
-    if (value) {
-      return value;
+    if (!normalized) {
+      return null;
     }
+
+    return normalized
+      .toLowerCase()
+      .startsWith("bearer ")
+      ? normalized.slice(7).trim()
+      : normalized;
   }
 
-  return null;
-}
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
 
-function normalizeToken(
-  token?: string | null,
-): string | null {
-  if (token === undefined || token === null) {
-    return getStoredToken();
+  if (error) {
+    throw {
+      status: 401,
+      message:
+        "تعذر الحصول على جلسة تسجيل الدخول.",
+      details: error,
+    } satisfies ApiError;
   }
 
-  const normalized = token.trim();
-
-  if (!normalized) {
-    return getStoredToken();
-  }
-
-  return normalized.toLowerCase().startsWith('bearer ')
-    ? normalized.substring(7).trim()
-    : normalized;
+  return session?.access_token ?? null;
 }
 
 async function parseResponse(
   response: Response,
 ): Promise<unknown> {
   const contentType =
-    response.headers.get('content-type') ?? '';
+    response.headers.get("content-type") ?? "";
 
-  if (contentType.includes('application/json')) {
+  if (
+    contentType
+      .toLowerCase()
+      .includes("application/json")
+  ) {
     return response.json();
   }
 
@@ -642,37 +890,77 @@ async function parseResponse(
   return text || null;
 }
 
+function getErrorMessage(
+  data: unknown,
+  status: number,
+): string {
+  if (
+    data &&
+    typeof data === "object" &&
+    "detail" in data
+  ) {
+    const detail = (
+      data as {
+        detail?: unknown;
+      }
+    ).detail;
+
+    if (typeof detail === "string") {
+      return detail;
+    }
+
+    if (detail !== undefined) {
+      try {
+        return JSON.stringify(detail);
+      } catch {
+        return "حدث خطأ في الخادم.";
+      }
+    }
+  }
+
+  if (typeof data === "string" && data) {
+    return data;
+  }
+
+  return `Request failed with status ${status}.`;
+}
+
 async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
   const {
     token,
+    query,
     headers: customHeaders,
     body,
     ...rest
   } = options;
 
-  const normalizedToken = normalizeToken(token);
+  const accessToken =
+    await resolveAccessToken(token);
 
   const headers = new Headers(customHeaders);
 
-  headers.set('Accept', 'application/json');
+  headers.set(
+    "Accept",
+    "application/json",
+  );
 
   if (
     body !== undefined &&
     body !== null
   ) {
     headers.set(
-      'Content-Type',
-      'application/json',
+      "Content-Type",
+      "application/json",
     );
   }
 
-  if (normalizedToken) {
+  if (accessToken) {
     headers.set(
-      'Authorization',
-      `Bearer ${normalizedToken}`,
+      "Authorization",
+      `Bearer ${accessToken}`,
     );
   }
 
@@ -680,7 +968,7 @@ async function request<T>(
 
   try {
     response = await fetch(
-      buildUrl(path),
+      buildUrl(path, query),
       {
         ...rest,
         headers,
@@ -691,47 +979,21 @@ async function request<T>(
     throw {
       status: 0,
       message:
-        'تعذر الاتصال بخادم التطبيق.',
+        "تعذر الاتصال بخادم التطبيق.",
       details: error,
     } satisfies ApiError;
   }
 
-  const data = await parseResponse(response);
+  const data =
+    await parseResponse(response);
 
   if (!response.ok) {
-    let message =
-      `Request failed with status ${response.status}.`;
-
-    if (
-      data &&
-      typeof data === 'object' &&
-      'detail' in data
-    ) {
-      const detail = (
-        data as {
-          detail?: unknown;
-        }
-      ).detail;
-
-      if (typeof detail === 'string') {
-        message = detail;
-      } else if (detail !== undefined) {
-        try {
-          message = JSON.stringify(detail);
-        } catch {
-          message = 'حدث خطأ في الخادم.';
-        }
-      }
-    } else if (
-      typeof data === 'string' &&
-      data
-    ) {
-      message = data;
-    }
-
     throw {
       status: response.status,
-      message,
+      message: getErrorMessage(
+        data,
+        response.status,
+      ),
       details: data,
     } satisfies ApiError;
   }
@@ -742,80 +1004,88 @@ async function request<T>(
 async function get<T>(
   path: string,
   token?: string | null,
+  query?: Record<string, QueryValue>,
 ): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: 'GET',
-      token,
-    },
-  );
+  return request<T>(path, {
+    method: "GET",
+    token,
+    query,
+  });
 }
 
 async function post<T>(
   path: string,
   body?: unknown,
   token?: string | null,
+  query?: Record<string, QueryValue>,
 ): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: 'POST',
-      token,
-      body:
-        body === undefined
-          ? undefined
-          : JSON.stringify(body),
-    },
-  );
+  return request<T>(path, {
+    method: "POST",
+    token,
+    query,
+    body:
+      body === undefined
+        ? undefined
+        : JSON.stringify(body),
+  });
 }
 
 async function patch<T>(
   path: string,
   body?: unknown,
   token?: string | null,
+  query?: Record<string, QueryValue>,
 ): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: 'PATCH',
-      token,
-      body:
-        body === undefined
-          ? undefined
-          : JSON.stringify(body),
-    },
-  );
+  return request<T>(path, {
+    method: "PATCH",
+    token,
+    query,
+    body:
+      body === undefined
+        ? undefined
+        : JSON.stringify(body),
+  });
 }
 
 async function put<T>(
   path: string,
   body?: unknown,
   token?: string | null,
+  query?: Record<string, QueryValue>,
 ): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: 'PUT',
-      token,
-      body:
-        body === undefined
-          ? undefined
-          : JSON.stringify(body),
-    },
-  );
+  return request<T>(path, {
+    method: "PUT",
+    token,
+    query,
+    body:
+      body === undefined
+        ? undefined
+        : JSON.stringify(body),
+  });
 }
 
 async function del<T>(
   path: string,
   token?: string | null,
+  query?: Record<string, QueryValue>,
 ): Promise<T> {
-  return request<T>(
-    path,
-    {
-      method: 'DELETE',
-      token,
-    },
+  return request<T>(path, {
+    method: "DELETE",
+    token,
+    query,
+  });
+}
+
+/* =====================================================================
+ * Health
+ * ===================================================================== */
+
+async function health(
+  token?: string | null,
+): Promise<HealthResponse> {
+  return get<HealthResponse>(
+    "/health",
+    token,
   );
 }
 
@@ -826,7 +1096,7 @@ async function del<T>(
 async function getGrades(
   token?: string | null,
 ): Promise<Grade[]> {
-  return get<Grade[]>('/grades', token);
+  return get<Grade[]>("/grades", token);
 }
 
 async function getGrade(
@@ -1002,7 +1272,9 @@ async function getQuestion(
   token?: string | null,
 ): Promise<Question> {
   return get<Question>(
-    `/questions/${encodeURIComponent(questionId)}`,
+    `/questions/${encodeURIComponent(
+      questionId,
+    )}`,
     token,
   );
 }
@@ -1111,7 +1383,7 @@ async function createLearningEvent(
 }
 
 /* =====================================================================
- * Gamification
+ * Student Gamification
  * ===================================================================== */
 
 async function getStudentStreak(
@@ -1159,11 +1431,13 @@ async function createParentInvitation(
   token?: string | null,
 ): Promise<ParentInvitation> {
   return post<ParentInvitation>(
-    `/parent/invitations?student_profile_id=${encodeURIComponent(
-      studentProfileId,
-    )}`,
+    "/parent/invitations",
     undefined,
     token,
+    {
+      student_profile_id:
+        studentProfileId,
+    },
   );
 }
 
@@ -1218,42 +1492,14 @@ async function getParentStudent(
 }
 
 /* =====================================================================
- * Games
+ * Canonical Games
  * ===================================================================== */
-
-async function getGames(
-  lessonId?: number,
-  token?: string | null,
-): Promise<Game[]> {
-  const games = await get<Game[]>(
-    '/games',
-    token,
-  );
-
-  if (lessonId === undefined) {
-    return games;
-  }
-
-  return games.filter(
-    (game) => game.lesson_id === lessonId,
-  );
-}
-
-async function getLessonGames(
-  lessonId: number,
-  token?: string | null,
-): Promise<Game[]> {
-  return get<Game[]>(
-    `/lessons/${lessonId}/games`,
-    token,
-  );
-}
 
 async function getGameTemplates(
   token?: string | null,
 ): Promise<GameTemplate[]> {
   return get<GameTemplate[]>(
-    '/game-templates',
+    "/game-templates",
     token,
   );
 }
@@ -1269,54 +1515,10 @@ async function getGameDefinitions(
   token?: string | null,
 ): Promise<GameDefinition[]> {
   return get<GameDefinition[]>(
-    '/game-definitions',
+    "/game-definitions",
     token,
-  ).then((definitions) => {
-    if (!query) {
-      return definitions;
-    }
-
-    return definitions.filter(
-      (definition) => {
-        if (
-          query.lesson_id !== undefined &&
-          definition.lesson_id !== query.lesson_id
-        ) {
-          return false;
-        }
-
-        if (
-          query.unit_id !== undefined &&
-          definition.unit_id !== query.unit_id
-        ) {
-          return false;
-        }
-
-        if (
-          query.subject_id !== undefined &&
-          definition.subject_id !== query.subject_id
-        ) {
-          return false;
-        }
-
-        if (
-          query.course_id !== undefined &&
-          definition.course_id !== query.course_id
-        ) {
-          return false;
-        }
-
-        if (
-          query.challenge_id !== undefined &&
-          definition.challenge_id !== query.challenge_id
-        ) {
-          return false;
-        }
-
-        return true;
-      },
-    );
-  });
+    query,
+  );
 }
 
 async function getGameDefinition(
@@ -1341,7 +1543,8 @@ async function createGameSession(
       studentProfileId,
     )}/game-sessions`,
     {
-      game_definition_id: gameDefinitionId,
+      game_definition_id:
+        gameDefinitionId,
     },
     token,
   );
@@ -1427,16 +1630,12 @@ async function getChallenges(
   gradeId?: number,
   token?: string | null,
 ): Promise<Challenge[]> {
-  const path =
-    gradeId === undefined
-      ? '/challenges'
-      : `/challenges?grade_id=${encodeURIComponent(
-          gradeId,
-        )}`;
-
   return get<Challenge[]>(
-    path,
+    "/challenges",
     token,
+    gradeId === undefined
+      ? undefined
+      : { grade_id: gradeId },
   );
 }
 
@@ -1475,7 +1674,10 @@ async function joinChallenge(
 async function getCourses(
   token?: string | null,
 ): Promise<Course[]> {
-  return get<Course[]>('/courses', token);
+  return get<Course[]>(
+    "/courses",
+    token,
+  );
 }
 
 async function getCourse(
@@ -1522,10 +1724,12 @@ async function getCourseEnrollment(
   return get<CourseEnrollment | null>(
     `/courses/${encodeURIComponent(
       courseId,
-    )}/enrollment?student_profile_id=${encodeURIComponent(
-      studentProfileId,
-    )}`,
+    )}/enrollment`,
     token,
+    {
+      student_profile_id:
+        studentProfileId,
+    },
   );
 }
 
@@ -1538,10 +1742,12 @@ async function getConversations(
   token?: string | null,
 ): Promise<Conversation[]> {
   return get<Conversation[]>(
-    `/conversations?student_profile_id=${encodeURIComponent(
-      studentProfileId,
-    )}`,
+    "/conversations",
     token,
+    {
+      student_profile_id:
+        studentProfileId,
+    },
   );
 }
 
@@ -1553,39 +1759,485 @@ async function getMessages(
   return get<Message[]>(
     `/conversations/${encodeURIComponent(
       conversationId,
-    )}/messages?student_profile_id=${encodeURIComponent(
-      studentProfileId,
+    )}/messages`,
+    token,
+    {
+      student_profile_id:
+        studentProfileId,
+    },
+  );
+}
+
+/* =====================================================================
+ * Admin
+ * ===================================================================== */
+
+async function getAdminMe(
+  token?: string | null,
+): Promise<AdminProfile> {
+  return get<AdminProfile>(
+    "/admin/me",
+    token,
+  );
+}
+
+async function getAdminContentOverview(
+  token?: string | null,
+): Promise<AdminContentOverview> {
+  return get<AdminContentOverview>(
+    "/admin/content/overview",
+    token,
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Admin lessons
+ * --------------------------------------------------------------------- */
+
+async function adminCreateLesson(
+  body: AdminLessonCreateInput,
+  token?: string | null,
+): Promise<Lesson> {
+  return post<Lesson>(
+    "/admin/lessons",
+    body,
+    token,
+  );
+}
+
+async function adminUpdateLesson(
+  lessonId: number,
+  body: AdminLessonUpdateInput,
+  token?: string | null,
+): Promise<Lesson> {
+  return patch<Lesson>(
+    `/admin/lessons/${lessonId}`,
+    body,
+    token,
+  );
+}
+
+async function adminDeleteLesson(
+  lessonId: number,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  lesson_id: number;
+}> {
+  return del(
+    `/admin/lessons/${lessonId}`,
+    token,
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Admin content blocks
+ * --------------------------------------------------------------------- */
+
+async function adminCreateContentBlock(
+  body: AdminContentBlockCreateInput,
+  token?: string | null,
+): Promise<LessonContentBlock> {
+  return post<LessonContentBlock>(
+    "/admin/content-blocks",
+    body,
+    token,
+  );
+}
+
+async function adminUpdateContentBlock(
+  blockId: string,
+  body: AdminContentBlockUpdateInput,
+  token?: string | null,
+): Promise<LessonContentBlock> {
+  return patch<LessonContentBlock>(
+    `/admin/content-blocks/${encodeURIComponent(
+      blockId,
+    )}`,
+    body,
+    token,
+  );
+}
+
+async function adminDeleteContentBlock(
+  blockId: string,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  id: string;
+}> {
+  return del(
+    `/admin/content-blocks/${encodeURIComponent(
+      blockId,
+    )}`,
+    token,
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Admin assets
+ * --------------------------------------------------------------------- */
+
+async function adminCreateAsset(
+  body: AdminAssetCreateInput,
+  token?: string | null,
+): Promise<LessonAsset> {
+  return post<LessonAsset>(
+    "/admin/assets",
+    body,
+    token,
+  );
+}
+
+async function adminUpdateAsset(
+  assetId: string,
+  body: AdminAssetUpdateInput,
+  token?: string | null,
+): Promise<LessonAsset> {
+  return patch<LessonAsset>(
+    `/admin/assets/${encodeURIComponent(
+      assetId,
+    )}`,
+    body,
+    token,
+  );
+}
+
+async function adminDeleteAsset(
+  assetId: string,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  id: string;
+}> {
+  return del(
+    `/admin/assets/${encodeURIComponent(
+      assetId,
+    )}`,
+    token,
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Admin objectives
+ * --------------------------------------------------------------------- */
+
+async function adminCreateObjective(
+  body: AdminObjectiveCreateInput,
+  token?: string | null,
+): Promise<LearningObjective> {
+  return post<LearningObjective>(
+    "/admin/objectives",
+    body,
+    token,
+  );
+}
+
+async function adminUpdateObjective(
+  objectiveId: number,
+  body: AdminObjectiveUpdateInput,
+  token?: string | null,
+): Promise<LearningObjective> {
+  return patch<LearningObjective>(
+    `/admin/objectives/${objectiveId}`,
+    body,
+    token,
+  );
+}
+
+async function adminDeleteObjective(
+  objectiveId: number,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  id: number;
+}> {
+  return del(
+    `/admin/objectives/${objectiveId}`,
+    token,
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Admin vocabulary
+ * --------------------------------------------------------------------- */
+
+async function adminCreateVocabulary(
+  body: AdminVocabularyCreateInput,
+  token?: string | null,
+): Promise<LessonVocabulary> {
+  return post<LessonVocabulary>(
+    "/admin/vocabulary",
+    body,
+    token,
+  );
+}
+
+async function adminUpdateVocabulary(
+  vocabularyId: number,
+  body: AdminVocabularyUpdateInput,
+  token?: string | null,
+): Promise<LessonVocabulary> {
+  return patch<LessonVocabulary>(
+    `/admin/vocabulary/${vocabularyId}`,
+    body,
+    token,
+  );
+}
+
+async function adminDeleteVocabulary(
+  vocabularyId: number,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  id: number;
+}> {
+  return del(
+    `/admin/vocabulary/${vocabularyId}`,
+    token,
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Admin concepts
+ * --------------------------------------------------------------------- */
+
+async function adminCreateConcept(
+  body: AdminConceptCreateInput,
+  token?: string | null,
+): Promise<Concept> {
+  return post<Concept>(
+    "/admin/concepts",
+    body,
+    token,
+  );
+}
+
+async function adminUpdateConcept(
+  conceptId: number,
+  body: AdminConceptUpdateInput,
+  token?: string | null,
+): Promise<Concept> {
+  return patch<Concept>(
+    `/admin/concepts/${conceptId}`,
+    body,
+    token,
+  );
+}
+
+async function adminDeleteConcept(
+  conceptId: number,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  id: number;
+}> {
+  return del(
+    `/admin/concepts/${conceptId}`,
+    token,
+  );
+}
+
+async function adminAttachConcept(
+  lessonId: number,
+  conceptId: number,
+  isPrimary = false,
+  token?: string | null,
+): Promise<LessonConcept> {
+  return post<LessonConcept>(
+    `/admin/lessons/${lessonId}/concepts/${conceptId}`,
+    undefined,
+    token,
+    {
+      is_primary: isPrimary,
+    },
+  );
+}
+
+async function adminDetachConcept(
+  lessonId: number,
+  conceptId: number,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  lesson_id: number;
+  concept_id: number;
+}> {
+  return del(
+    `/admin/lessons/${lessonId}/concepts/${conceptId}`,
+    token,
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Admin curriculum sources
+ * --------------------------------------------------------------------- */
+
+async function adminCreateSource(
+  body: AdminSourceCreateInput,
+  token?: string | null,
+): Promise<CurriculumSource> {
+  return post<CurriculumSource>(
+    "/admin/sources",
+    body,
+    token,
+  );
+}
+
+async function adminUpdateSource(
+  sourceId: string,
+  body: AdminSourceUpdateInput,
+  token?: string | null,
+): Promise<CurriculumSource> {
+  return patch<CurriculumSource>(
+    `/admin/sources/${encodeURIComponent(
+      sourceId,
+    )}`,
+    body,
+    token,
+  );
+}
+
+async function adminDeleteSource(
+  sourceId: string,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  id: string;
+}> {
+  return del(
+    `/admin/sources/${encodeURIComponent(
+      sourceId,
+    )}`,
+    token,
+  );
+}
+
+async function adminAttachSource(
+  lessonId: number,
+  sourceId: string,
+  options?: {
+    locator?: string | null;
+    notes?: string | null;
+  },
+  token?: string | null,
+): Promise<CurriculumSource> {
+  return post<CurriculumSource>(
+    `/admin/lessons/${lessonId}/sources/${encodeURIComponent(
+      sourceId,
+    )}`,
+    undefined,
+    token,
+    {
+      locator:
+        options?.locator ?? null,
+      notes:
+        options?.notes ?? null,
+    },
+  );
+}
+
+async function adminDetachSource(
+  lessonId: number,
+  sourceId: string,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  lesson_id: number;
+  source_id: string;
+}> {
+  return del(
+    `/admin/lessons/${lessonId}/sources/${encodeURIComponent(
+      sourceId,
+    )}`,
+    token,
+  );
+}
+
+/* ---------------------------------------------------------------------
+ * Admin questions
+ * --------------------------------------------------------------------- */
+
+async function adminCreateQuestion(
+  body: AdminQuestionCreateInput,
+  token?: string | null,
+): Promise<AdminQuestionRecord> {
+  return post<AdminQuestionRecord>(
+    "/admin/questions",
+    body,
+    token,
+  );
+}
+
+async function adminGetQuestion(
+  questionId: string,
+  token?: string | null,
+): Promise<AdminQuestionRecord> {
+  return get<AdminQuestionRecord>(
+    `/admin/questions/${encodeURIComponent(
+      questionId,
+    )}`,
+    token,
+  );
+}
+
+async function adminUpdateQuestion(
+  questionId: string,
+  body: AdminQuestionUpdateInput,
+  token?: string | null,
+): Promise<AdminQuestionRecord> {
+  return patch<AdminQuestionRecord>(
+    `/admin/questions/${encodeURIComponent(
+      questionId,
+    )}`,
+    body,
+    token,
+  );
+}
+
+async function adminDeleteQuestion(
+  questionId: string,
+  token?: string | null,
+): Promise<{
+  deleted: boolean;
+  id: string;
+}> {
+  return del(
+    `/admin/questions/${encodeURIComponent(
+      questionId,
     )}`,
     token,
   );
 }
 
 /* =====================================================================
- * Public API
+ * Exported API
  * ===================================================================== */
 
 export const apiClient = {
+  /* Low-level */
   get,
   post,
   patch,
   put,
   delete: del,
 
+  /* Health */
+  health,
+
+  /* Curriculum */
   getGrades,
   getGrade,
   getGradeTerms,
-
   getTerm,
   getTermSubjects,
-
   getSubject,
   getUnits,
-
   getUnit,
   getUnitLessons,
 
+  /* Lessons */
   getLesson,
-
   getLessonContent,
   getLessonAssets,
   getLessonObjectives,
@@ -1593,9 +2245,11 @@ export const apiClient = {
   getLessonConcepts,
   getLessonSources,
 
+  /* Questions */
   getLessonQuestions,
   getQuestion,
 
+  /* Student */
   getStudent,
   getStudentDashboard,
   getStudentProgress,
@@ -1604,40 +2258,84 @@ export const apiClient = {
   getStudentAnalytics,
   createLearningEvent,
 
+  /* Student gamification */
   getStudentStreak,
   getStudentXp,
   getStudentAchievements,
 
+  /* Parent */
   createParentInvitation,
   createParentInvitationForStudent,
   claimParentInvitation,
   getParentStudents,
   getParentStudent,
 
-  getGames,
-  getLessonGames,
+  /* Canonical games */
   getGameTemplates,
   getGameDefinitions,
   getGameDefinition,
-
   createGameSession,
   getStudentGameSessions,
   getGameSession,
   updateGameSession,
   createQuestionAttempt,
 
+  /* Challenges */
   getChallenges,
   getChallenge,
   joinChallenge,
 
+  /* Courses */
   getCourses,
   getCourse,
   getCourseModules,
   getCourseModuleLessons,
   getCourseEnrollment,
 
+  /* Messaging */
   getConversations,
   getMessages,
+
+  /* Admin */
+  getAdminMe,
+  getAdminContentOverview,
+
+  adminCreateLesson,
+  adminUpdateLesson,
+  adminDeleteLesson,
+
+  adminCreateContentBlock,
+  adminUpdateContentBlock,
+  adminDeleteContentBlock,
+
+  adminCreateAsset,
+  adminUpdateAsset,
+  adminDeleteAsset,
+
+  adminCreateObjective,
+  adminUpdateObjective,
+  adminDeleteObjective,
+
+  adminCreateVocabulary,
+  adminUpdateVocabulary,
+  adminDeleteVocabulary,
+
+  adminCreateConcept,
+  adminUpdateConcept,
+  adminDeleteConcept,
+  adminAttachConcept,
+  adminDetachConcept,
+
+  adminCreateSource,
+  adminUpdateSource,
+  adminDeleteSource,
+  adminAttachSource,
+  adminDetachSource,
+
+  adminCreateQuestion,
+  adminGetQuestion,
+  adminUpdateQuestion,
+  adminDeleteQuestion,
 };
 
 export default apiClient;
