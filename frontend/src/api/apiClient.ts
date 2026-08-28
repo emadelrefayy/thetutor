@@ -165,9 +165,12 @@ export interface Question {
   difficulty?: string | null;
   prompt: string;
   explanation?: string | null;
+  correct_answer?: unknown;
   metadata?: Record<string, unknown> | null;
   source?: string | null;
   status?: string | null;
+  skill_type?: string | null;
+  generation_source?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   relevance?: number | null;
@@ -267,18 +270,18 @@ export interface StudentAnalytics {
   recommendations: LearningRecommendation[];
 }
 
-export interface StudentDashboard {
-  summary: Record<string, unknown> | null;
-  streak: StudentStreak | null;
-  recommendations: LearningRecommendation[];
-}
-
 export interface StudentStreak {
   student_profile_id: string;
   current_streak: number;
   longest_streak: number;
   last_activity_date?: string | null;
   updated_at?: string | null;
+}
+
+export interface StudentDashboard {
+  summary: Record<string, unknown> | null;
+  streak: StudentStreak | null;
+  recommendations: LearningRecommendation[];
 }
 
 export interface XpTransaction {
@@ -337,7 +340,16 @@ export interface ParentStudent {
   relationship?: string | null;
   is_primary: boolean;
   created_at?: string | null;
-  [key: string]: unknown;
+
+  grade_id?: number | null;
+  xp?: number | null;
+  level?: number | null;
+  is_active?: boolean | null;
+  completed_lessons?: number | null;
+  games_played?: number | null;
+  questions_answered?: number | null;
+  correct_answers?: number | null;
+  accuracy_percent?: number | null;
 }
 
 export interface Game {
@@ -538,11 +550,9 @@ export interface Message {
   created_at?: string | null;
 }
 
-
 interface RequestOptions extends RequestInit {
   token?: string | null;
 }
-
 
 function buildUrl(
   path: string,
@@ -551,7 +561,7 @@ function buildUrl(
     string | number | boolean | null | undefined
   >,
 ): string {
-  const normalizedPath = path.startsWith("/")
+  const normalizedPath = path.startsWith('/')
     ? path
     : `/${path}`;
 
@@ -569,10 +579,7 @@ function buildUrl(
         value !== undefined &&
         value !== null
       ) {
-        params.set(
-          key,
-          String(value),
-        );
+        params.set(key, String(value));
       }
     },
   );
@@ -584,17 +591,15 @@ function buildUrl(
     : url;
 }
 
-
 function getStoredToken(): string | null {
   const possibleKeys = [
-    "access_token",
-    "supabase_access_token",
-    "supabase.auth.token",
+    'access_token',
+    'supabase_access_token',
+    'supabase.auth.token',
   ];
 
   for (const key of possibleKeys) {
-    const value =
-      localStorage.getItem(key);
+    const value = localStorage.getItem(key);
 
     if (value) {
       return value;
@@ -604,43 +609,38 @@ function getStoredToken(): string | null {
   return null;
 }
 
-
 function normalizeToken(
   token?: string | null,
 ): string | null {
-  if (!token) {
+  if (token === undefined || token === null) {
     return getStoredToken();
   }
 
-  return token
-    .startsWith("Bearer ")
-    ? token.substring(7).trim()
-    : token.trim();
-}
+  const normalized = token.trim();
 
+  if (!normalized) {
+    return getStoredToken();
+  }
+
+  return normalized.toLowerCase().startsWith('bearer ')
+    ? normalized.substring(7).trim()
+    : normalized;
+}
 
 async function parseResponse(
   response: Response,
 ): Promise<unknown> {
   const contentType =
-    response.headers.get(
-      "content-type",
-    ) ?? "";
+    response.headers.get('content-type') ?? '';
 
-  if (
-    contentType.includes(
-      "application/json",
-    )
-  ) {
+  if (contentType.includes('application/json')) {
     return response.json();
   }
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   return text || null;
 }
-
 
 async function request<T>(
   path: string,
@@ -653,30 +653,25 @@ async function request<T>(
     ...rest
   } = options;
 
-  const normalizedToken =
-    normalizeToken(token);
+  const normalizedToken = normalizeToken(token);
 
-  const headers =
-    new Headers(customHeaders);
+  const headers = new Headers(customHeaders);
 
-  headers.set(
-    "Accept",
-    "application/json",
-  );
+  headers.set('Accept', 'application/json');
 
   if (
     body !== undefined &&
     body !== null
   ) {
     headers.set(
-      "Content-Type",
-      "application/json",
+      'Content-Type',
+      'application/json',
     );
   }
 
   if (normalizedToken) {
     headers.set(
-      "Authorization",
+      'Authorization',
       `Bearer ${normalizedToken}`,
     );
   }
@@ -696,13 +691,12 @@ async function request<T>(
     throw {
       status: 0,
       message:
-        "تعذر الاتصال بخادم التطبيق.",
+        'تعذر الاتصال بخادم التطبيق.',
       details: error,
     } satisfies ApiError;
   }
 
-  const data =
-    await parseResponse(response);
+  const data = await parseResponse(response);
 
   if (!response.ok) {
     let message =
@@ -710,8 +704,8 @@ async function request<T>(
 
     if (
       data &&
-      typeof data === "object" &&
-      "detail" in data
+      typeof data === 'object' &&
+      'detail' in data
     ) {
       const detail = (
         data as {
@@ -719,18 +713,17 @@ async function request<T>(
         }
       ).detail;
 
-      if (
-        typeof detail === "string"
-      ) {
+      if (typeof detail === 'string') {
         message = detail;
-      } else if (
-        detail !== undefined
-      ) {
-        message =
-          JSON.stringify(detail);
+      } else if (detail !== undefined) {
+        try {
+          message = JSON.stringify(detail);
+        } catch {
+          message = 'حدث خطأ في الخادم.';
+        }
       }
     } else if (
-      typeof data === "string" &&
+      typeof data === 'string' &&
       data
     ) {
       message = data;
@@ -746,7 +739,6 @@ async function request<T>(
   return data as T;
 }
 
-
 async function get<T>(
   path: string,
   token?: string | null,
@@ -754,12 +746,11 @@ async function get<T>(
   return request<T>(
     path,
     {
-      method: "GET",
+      method: 'GET',
       token,
     },
   );
 }
-
 
 async function post<T>(
   path: string,
@@ -769,7 +760,7 @@ async function post<T>(
   return request<T>(
     path,
     {
-      method: "POST",
+      method: 'POST',
       token,
       body:
         body === undefined
@@ -778,7 +769,6 @@ async function post<T>(
     },
   );
 }
-
 
 async function patch<T>(
   path: string,
@@ -788,7 +778,7 @@ async function patch<T>(
   return request<T>(
     path,
     {
-      method: "PATCH",
+      method: 'PATCH',
       token,
       body:
         body === undefined
@@ -797,7 +787,6 @@ async function patch<T>(
     },
   );
 }
-
 
 async function put<T>(
   path: string,
@@ -807,7 +796,7 @@ async function put<T>(
   return request<T>(
     path,
     {
-      method: "PUT",
+      method: 'PUT',
       token,
       body:
         body === undefined
@@ -817,7 +806,6 @@ async function put<T>(
   );
 }
 
-
 async function del<T>(
   path: string,
   token?: string | null,
@@ -825,12 +813,11 @@ async function del<T>(
   return request<T>(
     path,
     {
-      method: "DELETE",
+      method: 'DELETE',
       token,
     },
   );
 }
-
 
 /* =====================================================================
  * Curriculum
@@ -838,101 +825,89 @@ async function del<T>(
 
 async function getGrades(
   token?: string | null,
-) {
-  return get<Grade[]>(
-    "/grades",
-    token,
-  );
+): Promise<Grade[]> {
+  return get<Grade[]>('/grades', token);
 }
-
 
 async function getGrade(
   gradeId: number,
   token?: string | null,
-) {
+): Promise<Grade> {
   return get<Grade>(
     `/grades/${gradeId}`,
     token,
   );
 }
 
-
 async function getGradeTerms(
   gradeId: number,
   token?: string | null,
-) {
+): Promise<Term[]> {
   return get<Term[]>(
     `/grades/${gradeId}/terms`,
     token,
   );
 }
 
-
 async function getTerm(
   termId: number,
   token?: string | null,
-) {
+): Promise<Term> {
   return get<Term>(
     `/terms/${termId}`,
     token,
   );
 }
 
-
 async function getTermSubjects(
   termId: number,
   token?: string | null,
-) {
+): Promise<Subject[]> {
   return get<Subject[]>(
     `/terms/${termId}/subjects`,
     token,
   );
 }
 
-
 async function getSubject(
   subjectId: number,
   token?: string | null,
-) {
+): Promise<Subject> {
   return get<Subject>(
     `/subjects/${subjectId}`,
     token,
   );
 }
 
-
 async function getUnits(
   subjectId: number,
   token?: string | null,
-) {
+): Promise<Unit[]> {
   return get<Unit[]>(
     `/subjects/${subjectId}/units`,
     token,
   );
 }
 
-
 async function getUnit(
   unitId: number,
   token?: string | null,
-) {
+): Promise<Unit> {
   return get<Unit>(
     `/units/${unitId}`,
     token,
   );
 }
 
-
 async function getUnitLessons(
   unitId: number,
   token?: string | null,
-) {
+): Promise<Lesson[]> {
   return get<Lesson[]>(
     `/units/${unitId}/lessons`,
     token,
   );
 }
-
 
 /* =====================================================================
  * Lessons
@@ -941,79 +916,72 @@ async function getUnitLessons(
 async function getLesson(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<Lesson> {
   return get<Lesson>(
     `/lessons/${lessonId}`,
     token,
   );
 }
 
-
 async function getLessonContent(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<LessonContentBlock[]> {
   return get<LessonContentBlock[]>(
     `/lessons/${lessonId}/content`,
     token,
   );
 }
 
-
 async function getLessonAssets(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<LessonAsset[]> {
   return get<LessonAsset[]>(
     `/lessons/${lessonId}/assets`,
     token,
   );
 }
 
-
 async function getLessonObjectives(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<LearningObjective[]> {
   return get<LearningObjective[]>(
     `/lessons/${lessonId}/objectives`,
     token,
   );
 }
 
-
 async function getLessonVocabulary(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<LessonVocabulary[]> {
   return get<LessonVocabulary[]>(
     `/lessons/${lessonId}/vocabulary`,
     token,
   );
 }
 
-
 async function getLessonConcepts(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<LessonConcept[]> {
   return get<LessonConcept[]>(
     `/lessons/${lessonId}/concepts`,
     token,
   );
 }
 
-
 async function getLessonSources(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<CurriculumSource[]> {
   return get<CurriculumSource[]>(
     `/lessons/${lessonId}/sources`,
     token,
   );
 }
-
 
 /* =====================================================================
  * Questions
@@ -1022,26 +990,22 @@ async function getLessonSources(
 async function getLessonQuestions(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<Question[]> {
   return get<Question[]>(
     `/lessons/${lessonId}/questions`,
     token,
   );
 }
 
-
 async function getQuestion(
   questionId: string,
   token?: string | null,
-) {
+): Promise<Question> {
   return get<Question>(
-    `/questions/${encodeURIComponent(
-      questionId,
-    )}`,
+    `/questions/${encodeURIComponent(questionId)}`,
     token,
   );
 }
-
 
 /* =====================================================================
  * Student
@@ -1050,7 +1014,7 @@ async function getQuestion(
 async function getStudent(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<StudentProfile> {
   return get<StudentProfile>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1059,11 +1023,10 @@ async function getStudent(
   );
 }
 
-
 async function getStudentDashboard(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<StudentDashboard> {
   return get<StudentDashboard>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1072,11 +1035,10 @@ async function getStudentDashboard(
   );
 }
 
-
 async function getStudentProgress(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<LessonProgress[]> {
   return get<LessonProgress[]>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1085,12 +1047,11 @@ async function getStudentProgress(
   );
 }
 
-
 async function getLessonProgress(
   studentProfileId: string,
   lessonId: number,
   token?: string | null,
-) {
+): Promise<LessonProgress | null> {
   return get<LessonProgress | null>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1098,7 +1059,6 @@ async function getLessonProgress(
     token,
   );
 }
-
 
 async function updateLessonProgress(
   studentProfileId: string,
@@ -1109,7 +1069,7 @@ async function updateLessonProgress(
     time_spent_seconds: number;
   },
   token?: string | null,
-) {
+): Promise<LessonProgress> {
   return post<LessonProgress>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1119,11 +1079,10 @@ async function updateLessonProgress(
   );
 }
 
-
 async function getStudentAnalytics(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<StudentAnalytics> {
   return get<StudentAnalytics>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1132,20 +1091,16 @@ async function getStudentAnalytics(
   );
 }
 
-
 async function createLearningEvent(
   studentProfileId: string,
   body: {
     event_type: string;
     lesson_id?: number | null;
     concept_id?: number | null;
-    metadata?: Record<
-      string,
-      unknown
-    >;
+    metadata?: Record<string, unknown>;
   },
   token?: string | null,
-) {
+): Promise<LearningEvent> {
   return post<LearningEvent>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1155,7 +1110,6 @@ async function createLearningEvent(
   );
 }
 
-
 /* =====================================================================
  * Gamification
  * ===================================================================== */
@@ -1163,7 +1117,7 @@ async function createLearningEvent(
 async function getStudentStreak(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<StudentStreak | null> {
   return get<StudentStreak | null>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1172,11 +1126,10 @@ async function getStudentStreak(
   );
 }
 
-
 async function getStudentXp(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<StudentXp> {
   return get<StudentXp>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1185,11 +1138,10 @@ async function getStudentXp(
   );
 }
 
-
 async function getStudentAchievements(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<Achievement[]> {
   return get<Achievement[]>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1198,7 +1150,6 @@ async function getStudentAchievements(
   );
 }
 
-
 /* =====================================================================
  * Parent
  * ===================================================================== */
@@ -1206,21 +1157,7 @@ async function getStudentAchievements(
 async function createParentInvitation(
   studentProfileId: string,
   token?: string | null,
-) {
-  return post<ParentInvitation>(
-    `/parent/invitations`,
-    undefined,
-    token,
-  ).then(
-    (result) => result,
-  );
-}
-
-
-async function createParentInvitationForStudent(
-  studentProfileId: string,
-  token?: string | null,
-) {
+): Promise<ParentInvitation> {
   return post<ParentInvitation>(
     `/parent/invitations?student_profile_id=${encodeURIComponent(
       studentProfileId,
@@ -1230,11 +1167,20 @@ async function createParentInvitationForStudent(
   );
 }
 
+async function createParentInvitationForStudent(
+  studentProfileId: string,
+  token?: string | null,
+): Promise<ParentInvitation> {
+  return createParentInvitation(
+    studentProfileId,
+    token,
+  );
+}
 
 async function claimParentInvitation(
   code: string,
   token?: string | null,
-) {
+): Promise<ParentInvitationClaim> {
   return post<ParentInvitationClaim>(
     `/parent/invitations/${encodeURIComponent(
       code,
@@ -1244,11 +1190,10 @@ async function claimParentInvitation(
   );
 }
 
-
 async function getParentStudents(
   parentProfileId: string,
   token?: string | null,
-) {
+): Promise<ParentStudent[]> {
   return get<ParentStudent[]>(
     `/parents/${encodeURIComponent(
       parentProfileId,
@@ -1257,12 +1202,11 @@ async function getParentStudents(
   );
 }
 
-
 async function getParentStudent(
   parentProfileId: string,
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<ParentStudent> {
   return get<ParentStudent>(
     `/parents/${encodeURIComponent(
       parentProfileId,
@@ -1273,7 +1217,6 @@ async function getParentStudent(
   );
 }
 
-
 /* =====================================================================
  * Games
  * ===================================================================== */
@@ -1281,42 +1224,39 @@ async function getParentStudent(
 async function getGames(
   lessonId?: number,
   token?: string | null,
-) {
-  return get<Game[]>(
-    "/games",
+): Promise<Game[]> {
+  const games = await get<Game[]>(
+    '/games',
     token,
-  ).then(
-    (games) =>
-      lessonId === undefined
-        ? games
-        : games.filter(
-            (game) =>
-              game.lesson_id === lessonId,
-          ),
+  );
+
+  if (lessonId === undefined) {
+    return games;
+  }
+
+  return games.filter(
+    (game) => game.lesson_id === lessonId,
   );
 }
-
 
 async function getLessonGames(
   lessonId: number,
   token?: string | null,
-) {
+): Promise<Game[]> {
   return get<Game[]>(
     `/lessons/${lessonId}/games`,
     token,
   );
 }
 
-
 async function getGameTemplates(
   token?: string | null,
-) {
+): Promise<GameTemplate[]> {
   return get<GameTemplate[]>(
-    "/game-templates",
+    '/game-templates',
     token,
   );
 }
-
 
 async function getGameDefinitions(
   query?: {
@@ -1327,47 +1267,62 @@ async function getGameDefinitions(
     challenge_id?: string;
   },
   token?: string | null,
-) {
-  const params: Record<
-    string,
-    string | number | boolean | null | undefined
-  > = {
-    lesson_id: query?.lesson_id,
-    unit_id: query?.unit_id,
-    subject_id: query?.subject_id,
-    course_id: query?.course_id,
-    challenge_id: query?.challenge_id,
-  };
-
-  const queryString =
-    new URLSearchParams(
-      Object.entries(params)
-        .filter(
-          ([, value]) =>
-            value !== undefined &&
-            value !== null,
-        )
-        .map(
-          ([key, value]) => [
-            key,
-            String(value),
-          ],
-        ),
-    ).toString();
-
+): Promise<GameDefinition[]> {
   return get<GameDefinition[]>(
-    queryString
-      ? `/game-definitions?${queryString}`
-      : "/game-definitions",
+    '/game-definitions',
     token,
-  );
-}
+  ).then((definitions) => {
+    if (!query) {
+      return definitions;
+    }
 
+    return definitions.filter(
+      (definition) => {
+        if (
+          query.lesson_id !== undefined &&
+          definition.lesson_id !== query.lesson_id
+        ) {
+          return false;
+        }
+
+        if (
+          query.unit_id !== undefined &&
+          definition.unit_id !== query.unit_id
+        ) {
+          return false;
+        }
+
+        if (
+          query.subject_id !== undefined &&
+          definition.subject_id !== query.subject_id
+        ) {
+          return false;
+        }
+
+        if (
+          query.course_id !== undefined &&
+          definition.course_id !== query.course_id
+        ) {
+          return false;
+        }
+
+        if (
+          query.challenge_id !== undefined &&
+          definition.challenge_id !== query.challenge_id
+        ) {
+          return false;
+        }
+
+        return true;
+      },
+    );
+  });
+}
 
 async function getGameDefinition(
   gameDefinitionId: string,
   token?: string | null,
-) {
+): Promise<GameDefinition> {
   return get<GameDefinition>(
     `/game-definitions/${encodeURIComponent(
       gameDefinitionId,
@@ -1376,29 +1331,26 @@ async function getGameDefinition(
   );
 }
 
-
 async function createGameSession(
   studentProfileId: string,
   gameDefinitionId: string,
   token?: string | null,
-) {
+): Promise<GameSession> {
   return post<GameSession>(
     `/students/${encodeURIComponent(
       studentProfileId,
     )}/game-sessions`,
     {
-      game_definition_id:
-        gameDefinitionId,
+      game_definition_id: gameDefinitionId,
     },
     token,
   );
 }
 
-
 async function getStudentGameSessions(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<GameSession[]> {
   return get<GameSession[]>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1407,12 +1359,11 @@ async function getStudentGameSessions(
   );
 }
 
-
 async function getGameSession(
   studentProfileId: string,
   sessionId: string,
   token?: string | null,
-) {
+): Promise<GameSession> {
   return get<GameSession>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1423,7 +1374,6 @@ async function getGameSession(
   );
 }
 
-
 async function updateGameSession(
   studentProfileId: string,
   sessionId: string,
@@ -1433,13 +1383,10 @@ async function updateGameSession(
     max_score: number;
     accuracy?: number | null;
     xp_earned: number;
-    metadata?: Record<
-      string,
-      unknown
-    >;
+    metadata?: Record<string, unknown>;
   },
   token?: string | null,
-) {
+): Promise<GameSession> {
   return patch<GameSession>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1451,7 +1398,6 @@ async function updateGameSession(
   );
 }
 
-
 async function createQuestionAttempt(
   studentProfileId: string,
   body: {
@@ -1460,13 +1406,10 @@ async function createQuestionAttempt(
     is_correct: boolean;
     points_awarded: number;
     response_time_ms?: number | null;
-    feedback?: Record<
-      string,
-      unknown
-    >;
+    feedback?: Record<string, unknown>;
   },
   token?: string | null,
-) {
+): Promise<QuestionAttempt> {
   return post<QuestionAttempt>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1476,7 +1419,6 @@ async function createQuestionAttempt(
   );
 }
 
-
 /* =====================================================================
  * Challenges
  * ===================================================================== */
@@ -1484,23 +1426,24 @@ async function createQuestionAttempt(
 async function getChallenges(
   gradeId?: number,
   token?: string | null,
-) {
-  const query =
+): Promise<Challenge[]> {
+  const path =
     gradeId === undefined
-      ? ""
-      : `?grade_id=${gradeId}`;
+      ? '/challenges'
+      : `/challenges?grade_id=${encodeURIComponent(
+          gradeId,
+        )}`;
 
   return get<Challenge[]>(
-    `/challenges${query}`,
+    path,
     token,
   );
 }
 
-
 async function getChallenge(
   challengeId: string,
   token?: string | null,
-) {
+): Promise<Challenge> {
   return get<Challenge>(
     `/challenges/${encodeURIComponent(
       challengeId,
@@ -1509,12 +1452,11 @@ async function getChallenge(
   );
 }
 
-
 async function joinChallenge(
   studentProfileId: string,
   challengeId: string,
   token?: string | null,
-) {
+): Promise<ChallengeParticipant> {
   return post<ChallengeParticipant>(
     `/students/${encodeURIComponent(
       studentProfileId,
@@ -1526,25 +1468,20 @@ async function joinChallenge(
   );
 }
 
-
 /* =====================================================================
  * Courses
  * ===================================================================== */
 
 async function getCourses(
   token?: string | null,
-) {
-  return get<Course[]>(
-    "/courses",
-    token,
-  );
+): Promise<Course[]> {
+  return get<Course[]>('/courses', token);
 }
-
 
 async function getCourse(
   courseId: string,
   token?: string | null,
-) {
+): Promise<Course> {
   return get<Course>(
     `/courses/${encodeURIComponent(
       courseId,
@@ -1553,11 +1490,10 @@ async function getCourse(
   );
 }
 
-
 async function getCourseModules(
   courseId: string,
   token?: string | null,
-) {
+): Promise<CourseModule[]> {
   return get<CourseModule[]>(
     `/courses/${encodeURIComponent(
       courseId,
@@ -1566,11 +1502,10 @@ async function getCourseModules(
   );
 }
 
-
 async function getCourseModuleLessons(
   moduleId: string,
   token?: string | null,
-) {
+): Promise<CourseLesson[]> {
   return get<CourseLesson[]>(
     `/course-modules/${encodeURIComponent(
       moduleId,
@@ -1579,12 +1514,11 @@ async function getCourseModuleLessons(
   );
 }
 
-
 async function getCourseEnrollment(
   courseId: string,
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<CourseEnrollment | null> {
   return get<CourseEnrollment | null>(
     `/courses/${encodeURIComponent(
       courseId,
@@ -1595,7 +1529,6 @@ async function getCourseEnrollment(
   );
 }
 
-
 /* =====================================================================
  * Messaging
  * ===================================================================== */
@@ -1603,7 +1536,7 @@ async function getCourseEnrollment(
 async function getConversations(
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<Conversation[]> {
   return get<Conversation[]>(
     `/conversations?student_profile_id=${encodeURIComponent(
       studentProfileId,
@@ -1612,12 +1545,11 @@ async function getConversations(
   );
 }
 
-
 async function getMessages(
   conversationId: string,
   studentProfileId: string,
   token?: string | null,
-) {
+): Promise<Message[]> {
   return get<Message[]>(
     `/conversations/${encodeURIComponent(
       conversationId,
@@ -1627,7 +1559,6 @@ async function getMessages(
     token,
   );
 }
-
 
 /* =====================================================================
  * Public API
@@ -1708,6 +1639,5 @@ export const apiClient = {
   getConversations,
   getMessages,
 };
-
 
 export default apiClient;
