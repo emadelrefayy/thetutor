@@ -14,7 +14,10 @@ async function request<T>(
     options.headers,
   );
 
-  headers.set("Accept", "application/json");
+  headers.set(
+    "Accept",
+    "application/json",
+  );
 
   if (options.body) {
     headers.set(
@@ -45,7 +48,9 @@ async function request<T>(
     try {
       const error = await response.json();
 
-      if (typeof error?.detail === "string") {
+      if (
+        typeof error?.detail === "string"
+      ) {
         message = error.detail;
       }
     } catch {
@@ -63,7 +68,9 @@ async function request<T>(
 }
 
 export const apiClient = {
+  // --------------------------------------------------
   // Curriculum
+  // --------------------------------------------------
 
   getGrades() {
     return request("/grades");
@@ -78,12 +85,6 @@ export const apiClient = {
   getSubjects(termId: number) {
     return request(
       `/terms/${termId}/subjects`,
-    );
-  },
-
-  getSubject(subjectId: number) {
-    return request(
-      `/subjects/${subjectId}`,
     );
   },
 
@@ -105,6 +106,10 @@ export const apiClient = {
     );
   },
 
+  // --------------------------------------------------
+  // Lesson Content
+  // --------------------------------------------------
+
   getLessonContent(lessonId: number) {
     return request(
       `/lessons/${lessonId}/content`,
@@ -116,6 +121,10 @@ export const apiClient = {
       `/lessons/${lessonId}/assets`,
     );
   },
+
+  // --------------------------------------------------
+  // Questions
+  // --------------------------------------------------
 
   getLessonQuestions(lessonId: number) {
     return request(
@@ -129,7 +138,9 @@ export const apiClient = {
     );
   },
 
+  // --------------------------------------------------
   // Student
+  // --------------------------------------------------
 
   getStudent(
     studentProfileId: string,
@@ -137,7 +148,9 @@ export const apiClient = {
   ) {
     return request(
       `/students/${studentProfileId}`,
-      { token },
+      {
+        token,
+      },
     );
   },
 
@@ -147,7 +160,9 @@ export const apiClient = {
   ) {
     return request(
       `/students/${studentProfileId}/progress`,
-      { token },
+      {
+        token,
+      },
     );
   },
 
@@ -157,11 +172,15 @@ export const apiClient = {
   ) {
     return request(
       `/students/${studentProfileId}/analytics`,
-      { token },
+      {
+        token,
+      },
     );
   },
 
-  // Parent
+  // --------------------------------------------------
+  // Parent Invitations
+  // --------------------------------------------------
 
   createParentInvitation(
     studentProfileId: string,
@@ -191,7 +210,9 @@ export const apiClient = {
     );
   },
 
+  // --------------------------------------------------
   // Health
+  // --------------------------------------------------
 
   health() {
     return request("/health");
