@@ -1,76 +1,130 @@
 import React from 'react';
 import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
+  BrowserRouter,
   Navigate,
+  Route,
+  Routes,
 } from 'react-router-dom';
 
 import Navbar from './components/Navbar';
+
 import AdminDashboard from './pages/AdminDashboard';
+import { ParentDashboard } from './pages/ParentDashboard';
+import { StudentDashboard } from './pages/StudentDashboard';
+
 import SubjectPage from './pages/SubjectPage';
 import UnitPage from './pages/UnitPage';
 import LessonPage from './pages/LessonPage';
 import NotFound from './pages/NotFound';
 
-import { StudentDashboard } from './pages/StudentDashboard';
-import { ParentDashboard } from './pages/ParentDashboard';
 
-export const App: React.FC = () => {
+const App: React.FC = () => {
   return (
-    <Router>
+    <BrowserRouter>
       <div
-        className="min-h-screen bg-slate-950 text-slate-100 flex flex-col dir-rtl font-sans antialiased selection:bg-amber-500 selection:text-slate-950"
         dir="rtl"
+        className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-amber-500 selection:text-slate-950"
       >
         <Navbar />
 
-        <main className="flex-1 w-full max-w-md sm:max-w-xl md:max-w-4xl mx-auto px-3 py-4">
+        <main className="min-h-[calc(100vh-4rem)] w-full">
           <Routes>
+
+            {/* -------------------------------------------------- */}
+            {/* Root */}
+            {/* -------------------------------------------------- */}
+
             <Route
               path="/"
-              element={<Navigate to="/student" replace />}
+              element={
+                <Navigate
+                  to="/student"
+                  replace
+                />
+              }
             />
+
+
+            {/* -------------------------------------------------- */}
+            {/* Student */}
+            {/* -------------------------------------------------- */}
 
             <Route
               path="/student"
-              element={<StudentDashboard />}
+              element={
+                <StudentDashboard />
+              }
             />
+
+
+            {/* -------------------------------------------------- */}
+            {/* Parent */}
+            {/* -------------------------------------------------- */}
 
             <Route
               path="/parent"
-              element={<ParentDashboard />}
+              element={
+                <ParentDashboard />
+              }
             />
+
+
+            {/* -------------------------------------------------- */}
+            {/* Admin */}
+            {/* -------------------------------------------------- */}
 
             <Route
               path="/admin"
-              element={<AdminDashboard />}
+              element={
+                <AdminDashboard />
+              }
             />
+
+
+            {/* -------------------------------------------------- */}
+            {/* Academic Curriculum */}
+            {/* Grade → Term → Subject → Unit → Lesson */}
+            {/* -------------------------------------------------- */}
 
             <Route
               path="/subject/:subjectId"
-              element={<SubjectPage />}
+              element={
+                <SubjectPage />
+              }
             />
 
             <Route
               path="/unit/:unitId"
-              element={<UnitPage />}
+              element={
+                <UnitPage />
+              }
             />
 
             <Route
               path="/lesson/:lessonId"
-              element={<LessonPage />}
+              element={
+                <LessonPage />
+              }
             />
+
+
+            {/* -------------------------------------------------- */}
+            {/* 404 */}
+            {/* -------------------------------------------------- */}
 
             <Route
               path="*"
-              element={<NotFound />}
+              element={
+                <NotFound />
+              }
             />
+
           </Routes>
         </main>
       </div>
-    </Router>
+    </BrowserRouter>
   );
 };
+
 
 export default App;
