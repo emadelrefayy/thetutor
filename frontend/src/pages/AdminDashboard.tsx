@@ -1,26 +1,32 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
-import { apiClient } from '../api/apiClient';
+import {
+  apiClient,
+  type Grade,
+  type Term,
+  type Subject,
+  type Unit,
+  type Lesson,
+  type LessonContentBlock,
+  type LessonAsset,
+  type LearningObjective,
+  type LessonVocabulary,
+  type LessonConcept,
+  type CurriculumSource,
+  type Question,
+} from "../api/apiClient";
 
-import type {
-  Grade,
-  Lesson,
-  Subject,
-  Term,
-  Unit,
-} from '../api/apiClient';
-
-type Section =
-  | 'overview'
-  | 'content'
-  | 'subscribers'
-  | 'server';
+type ContentTab =
+  | "overview"
+  | "lesson"
+  | "blocks"
+  | "assets"
+  | "objectives"
+  | "vocabulary"
+  | "concepts"
+  | "questions"
+  | "sources";
 
 interface HealthResponse {
   service?: string;
@@ -28,20 +34,9 @@ interface HealthResponse {
   version?: string;
 }
 
-interface ConnectionState {
-  status: 'checking' | 'connected' | 'error';
-  message: string;
-}
-
 const AdminDashboard: React.FC = () => {
-  const [section, setSection] =
-    useState<Section>('overview');
-
-  const [connection, setConnection] =
-    useState<ConnectionState>({
-      status: 'checking',
-      message: 'جاري اختبار اتصال الـBackend...',
-    });
+  const [activeTab, setActiveTab] =
+    useState<ContentTab>("overview");
 
   const [grades, setGrades] =
     useState<Grade[]>([]);
@@ -70,20 +65,54 @@ const AdminDashboard: React.FC = () => {
   const [selectedUnitId, setSelectedUnitId] =
     useState<number | null>(null);
 
+  const [selectedLessonId, setSelectedLessonId] =
+    useState<number | null>(null);
+
+  const [selectedLesson, setSelectedLesson] =
+    useState<Lesson | null>(null);
+
+  const [contentBlocks, setContentBlocks] =
+    useState<LessonContentBlock[]>([]);
+
+  const [assets, setAssets] =
+    useState<LessonAsset[]>([]);
+
+  const [objectives, setObjectives] =
+    useState<LearningObjective[]>([]);
+
+  const [vocabulary, setVocabulary] =
+    useState<LessonVocabulary[]>([]);
+
+  const [concepts, setConcepts] =
+    useState<LessonConcept[]>([]);
+
+  const [questions, setQuestions] =
+    useState<Question[]>([]);
+
+  const [sources, setSources] =
+    useState<CurriculumSource[]>([]);
+
   const [loading, setLoading] =
+    useState(false);
+
+  const [lessonLoading, setLessonLoading] =
     useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
 
-  const [lastCheckedAt, setLastCheckedAt] =
+  const [connection, setConnection] = useState<
+    "checking" | "connected" | "error"
+  >("checking");
+
+  const [lastChecked, setLastChecked] =
     useState<string | null>(null);
 
   const selectedGrade = useMemo(
     () =>
       grades.find(
-        (grade) =>
-          grade.id === selectedGradeId,
+        (item) =>
+          item.id === selectedGradeId,
       ) ?? null,
     [grades, selectedGradeId],
   );
@@ -91,8 +120,8 @@ const AdminDashboard: React.FC = () => {
   const selectedTerm = useMemo(
     () =>
       terms.find(
-        (term) =>
-          term.id === selectedTermId,
+        (item) =>
+          item.id === selectedTermId,
       ) ?? null,
     [terms, selectedTermId],
   );
@@ -100,8 +129,8 @@ const AdminDashboard: React.FC = () => {
   const selectedSubject = useMemo(
     () =>
       subjects.find(
-        (subject) =>
-          subject.id === selectedSubjectId,
+        (item) =>
+          item.id === selectedSubjectId,
       ) ?? null,
     [subjects, selectedSubjectId],
   );
@@ -109,366 +138,352 @@ const AdminDashboard: React.FC = () => {
   const selectedUnit = useMemo(
     () =>
       units.find(
-        (unit) =>
-          unit.id === selectedUnitId,
+        (item) =>
+          item.id === selectedUnitId,
       ) ?? null,
     [units, selectedUnitId],
   );
 
-  const testServerConnection =
-    useCallback(async () => {
-      setConnection({
-        status: 'checking',
-        message:
-          'جاري اختبار الاتصال بالـBackend...',
-      });
+  const resetLessonData = () => {
+    setSelectedLesson(null);
+    setSelectedLessonId(null);
+    setContentBlocks([]);
+    setAssets([]);
+    setObjectives([]);
+    setVocabulary([]);
+    setConcepts([]);
+    setQuestions([]);
+    setSources([]);
+  };
+
+  const resetFromGrade = () => {
+    setTerms([]);
+    setSubjects([]);
+    setUnits([]);
+    setLessons([]);
+    resetLessonData();
+    setSelectedTermId(null);
+    setSelectedSubjectId(null);
+    setSelectedUnitId(null);
+  };
+
+  const resetFromTerm = () => {
+    setSubjects([]);
+    setUnits([]);
+    setLessons([]);
+    resetLessonData();
+    setSelectedSubjectId(null);
+    setSelectedUnitId(null);
+  };
+
+  const resetFromSubject = () => {
+    setUnits([]);
+    setLessons([]);
+    resetLessonData();
+    setSelectedUnitId(null);
+  };
+
+  const resetFromUnit = () => {
+    setLessons([]);
+    resetLessonData();
+  };
+
+  const checkConnection = useCallback(
+    async () => {
+      setConnection("checking");
 
       try {
         const response =
           await apiClient.get<HealthResponse>(
-            '/health',
+            "/health",
           );
 
         if (
           !response ||
-          response.status !== 'healthy'
+          response.status !== "healthy"
         ) {
           throw new Error(
-            'الـBackend استجاب ولكن حالة الخدمة غير سليمة.',
+            "Backend health check failed.",
           );
         }
 
-        setConnection({
-          status: 'connected',
-          message:
-            'الاتصال بالـBackend يعمل بصورة صحيحة.',
-        });
-
-        setLastCheckedAt(
-          new Date().toLocaleString('ar-EG'),
+        setConnection("connected");
+        setLastChecked(
+          new Date().toLocaleString("ar-EG"),
         );
       } catch (err) {
         console.error(
-          'Server health check failed:',
+          "Admin server check failed:",
           err,
         );
 
-        setConnection({
-          status: 'error',
-          message:
-            err instanceof Error
-              ? err.message
-              : 'تعذر الاتصال بالـBackend.',
-        });
-
-        setLastCheckedAt(
-          new Date().toLocaleString('ar-EG'),
+        setConnection("error");
+        setLastChecked(
+          new Date().toLocaleString("ar-EG"),
         );
       }
-    }, []);
+    },
+    [],
+  );
 
-  const loadCurriculum =
-    useCallback(async () => {
+  const loadGrades = useCallback(
+    async () => {
       setLoading(true);
       setError(null);
 
       try {
-        const loadedGrades =
+        const data =
           await apiClient.getGrades();
 
-        if (!Array.isArray(loadedGrades)) {
+        if (!Array.isArray(data)) {
           throw new Error(
-            'استجابة الصفوف الدراسية غير صالحة.',
+            "Invalid grades response.",
           );
         }
 
-        setGrades(loadedGrades);
+        setGrades(data);
 
-        if (loadedGrades.length === 0) {
-          setTerms([]);
-          setSubjects([]);
-          setUnits([]);
-          setLessons([]);
-
-          setSelectedGradeId(null);
-          setSelectedTermId(null);
-          setSelectedSubjectId(null);
-          setSelectedUnitId(null);
-
+        if (data.length === 0) {
+          resetFromGrade();
           return;
         }
 
-        const gradeId =
+        const currentId =
           selectedGradeId &&
-          loadedGrades.some(
-            (grade) =>
-              grade.id === selectedGradeId,
+          data.some(
+            (item) =>
+              item.id === selectedGradeId,
           )
             ? selectedGradeId
-            : loadedGrades[0].id;
+            : data[0].id;
 
-        setSelectedGradeId(gradeId);
+        setSelectedGradeId(currentId);
 
-        const loadedTerms =
+        const termData =
           await apiClient.getGradeTerms(
-            gradeId,
+            currentId,
           );
 
-        if (!Array.isArray(loadedTerms)) {
-          throw new Error(
-            'استجابة الفصول الدراسية غير صالحة.',
-          );
-        }
+        setTerms(
+          Array.isArray(termData)
+            ? termData
+            : [],
+        );
 
-        setTerms(loadedTerms);
-
-        if (loadedTerms.length === 0) {
-          setSubjects([]);
-          setUnits([]);
-          setLessons([]);
-
-          setSelectedTermId(null);
-          setSelectedSubjectId(null);
-          setSelectedUnitId(null);
-
+        if (
+          !Array.isArray(termData) ||
+          termData.length === 0
+        ) {
+          resetFromTerm();
           return;
         }
 
         const termId =
           selectedTermId &&
-          loadedTerms.some(
-            (term) =>
-              term.id === selectedTermId,
+          termData.some(
+            (item) =>
+              item.id === selectedTermId,
           )
             ? selectedTermId
-            : loadedTerms[0].id;
+            : termData[0].id;
 
         setSelectedTermId(termId);
 
-        const loadedSubjects =
+        const subjectData =
           await apiClient.getTermSubjects(
             termId,
           );
 
-        if (!Array.isArray(loadedSubjects)) {
-          throw new Error(
-            'استجابة المواد الدراسية غير صالحة.',
-          );
-        }
+        setSubjects(
+          Array.isArray(subjectData)
+            ? subjectData
+            : [],
+        );
 
-        setSubjects(loadedSubjects);
-
-        if (loadedSubjects.length === 0) {
-          setUnits([]);
-          setLessons([]);
-
-          setSelectedSubjectId(null);
-          setSelectedUnitId(null);
-
+        if (
+          !Array.isArray(subjectData) ||
+          subjectData.length === 0
+        ) {
+          resetFromSubject();
           return;
         }
 
         const subjectId =
           selectedSubjectId &&
-          loadedSubjects.some(
-            (subject) =>
-              subject.id ===
-              selectedSubjectId,
+          subjectData.some(
+            (item) =>
+              item.id === selectedSubjectId,
           )
             ? selectedSubjectId
-            : loadedSubjects[0].id;
+            : subjectData[0].id;
 
         setSelectedSubjectId(subjectId);
 
-        const loadedUnits =
+        const unitData =
           await apiClient.getUnits(
             subjectId,
           );
 
-        if (!Array.isArray(loadedUnits)) {
-          throw new Error(
-            'استجابة الوحدات غير صالحة.',
-          );
-        }
+        setUnits(
+          Array.isArray(unitData)
+            ? unitData
+            : [],
+        );
 
-        setUnits(loadedUnits);
-
-        if (loadedUnits.length === 0) {
-          setLessons([]);
-          setSelectedUnitId(null);
-
+        if (
+          !Array.isArray(unitData) ||
+          unitData.length === 0
+        ) {
+          resetFromUnit();
           return;
         }
 
         const unitId =
           selectedUnitId &&
-          loadedUnits.some(
-            (unit) =>
-              unit.id === selectedUnitId,
+          unitData.some(
+            (item) =>
+              item.id === selectedUnitId,
           )
             ? selectedUnitId
-            : loadedUnits[0].id;
+            : unitData[0].id;
 
         setSelectedUnitId(unitId);
 
-        const loadedLessons =
+        const lessonData =
           await apiClient.getUnitLessons(
             unitId,
           );
 
-        if (!Array.isArray(loadedLessons)) {
-          throw new Error(
-            'استجابة الدروس غير صالحة.',
-          );
-        }
-
-        setLessons(loadedLessons);
+        setLessons(
+          Array.isArray(lessonData)
+            ? lessonData
+            : [],
+        );
       } catch (err) {
         console.error(
-          'Curriculum loading failed:',
+          "Failed to load curriculum:",
           err,
         );
-
-        setGrades([]);
-        setTerms([]);
-        setSubjects([]);
-        setUnits([]);
-        setLessons([]);
-
-        setSelectedGradeId(null);
-        setSelectedTermId(null);
-        setSelectedSubjectId(null);
-        setSelectedUnitId(null);
 
         setError(
           err instanceof Error
             ? err.message
-            : 'تعذر تحميل هيكل المنهج.',
+            : "تعذر تحميل المنهج.",
         );
       } finally {
         setLoading(false);
       }
-    }, [
+    },
+    [
       selectedGradeId,
       selectedTermId,
       selectedSubjectId,
       selectedUnitId,
-    ]);
+    ],
+  );
 
   useEffect(() => {
-    testServerConnection();
-  }, [testServerConnection]);
+    void checkConnection();
+  }, [checkConnection]);
 
   useEffect(() => {
-    loadCurriculum();
-  }, [loadCurriculum]);
+    void loadGrades();
+  }, [loadGrades]);
 
   const handleGradeChange = async (
     gradeId: number,
   ) => {
     setSelectedGradeId(gradeId);
-    setSelectedTermId(null);
-    setSelectedSubjectId(null);
-    setSelectedUnitId(null);
 
-    setTerms([]);
-    setSubjects([]);
-    setUnits([]);
-    setLessons([]);
+    resetFromGrade();
 
     setLoading(true);
     setError(null);
 
     try {
-      const loadedTerms =
+      const data =
         await apiClient.getGradeTerms(
           gradeId,
         );
 
       setTerms(
-        Array.isArray(loadedTerms)
-          ? loadedTerms
-          : [],
+        Array.isArray(data) ? data : [],
       );
 
       if (
-        !Array.isArray(loadedTerms) ||
-        loadedTerms.length === 0
+        !Array.isArray(data) ||
+        data.length === 0
       ) {
         return;
       }
 
-      const termId =
-        loadedTerms[0].id;
+      const termId = data[0].id;
 
       setSelectedTermId(termId);
 
-      const loadedSubjects =
+      const subjectsData =
         await apiClient.getTermSubjects(
           termId,
         );
 
       setSubjects(
-        Array.isArray(loadedSubjects)
-          ? loadedSubjects
+        Array.isArray(subjectsData)
+          ? subjectsData
           : [],
       );
 
       if (
-        !Array.isArray(loadedSubjects) ||
-        loadedSubjects.length === 0
+        !Array.isArray(subjectsData) ||
+        subjectsData.length === 0
       ) {
         return;
       }
 
       const subjectId =
-        loadedSubjects[0].id;
+        subjectsData[0].id;
 
-      setSelectedSubjectId(
-        subjectId,
-      );
+      setSelectedSubjectId(subjectId);
 
-      const loadedUnits =
+      const unitsData =
         await apiClient.getUnits(
           subjectId,
         );
 
       setUnits(
-        Array.isArray(loadedUnits)
-          ? loadedUnits
+        Array.isArray(unitsData)
+          ? unitsData
           : [],
       );
 
       if (
-        !Array.isArray(loadedUnits) ||
-        loadedUnits.length === 0
+        !Array.isArray(unitsData) ||
+        unitsData.length === 0
       ) {
         return;
       }
 
-      const unitId =
-        loadedUnits[0].id;
+      const unitId = unitsData[0].id;
 
       setSelectedUnitId(unitId);
 
-      const loadedLessons =
+      const lessonsData =
         await apiClient.getUnitLessons(
           unitId,
         );
 
       setLessons(
-        Array.isArray(loadedLessons)
-          ? loadedLessons
+        Array.isArray(lessonsData)
+          ? lessonsData
           : [],
       );
     } catch (err) {
       console.error(
-        'Grade change failed:',
+        "Grade selection failed:",
         err,
       );
 
       setError(
-        'تعذر تحميل بيانات الصف المحدد.',
+        "تعذر تحميل محتوى الصف.",
       );
     } finally {
       setLoading(false);
@@ -479,83 +494,73 @@ const AdminDashboard: React.FC = () => {
     termId: number,
   ) => {
     setSelectedTermId(termId);
-    setSelectedSubjectId(null);
-    setSelectedUnitId(null);
 
-    setSubjects([]);
-    setUnits([]);
-    setLessons([]);
+    resetFromTerm();
 
     setLoading(true);
     setError(null);
 
     try {
-      const loadedSubjects =
+      const data =
         await apiClient.getTermSubjects(
           termId,
         );
 
       setSubjects(
-        Array.isArray(loadedSubjects)
-          ? loadedSubjects
-          : [],
+        Array.isArray(data) ? data : [],
       );
 
       if (
-        !Array.isArray(loadedSubjects) ||
-        loadedSubjects.length === 0
+        !Array.isArray(data) ||
+        data.length === 0
       ) {
         return;
       }
 
-      const subjectId =
-        loadedSubjects[0].id;
+      const subjectId = data[0].id;
 
-      setSelectedSubjectId(
-        subjectId,
-      );
+      setSelectedSubjectId(subjectId);
 
-      const loadedUnits =
+      const unitsData =
         await apiClient.getUnits(
           subjectId,
         );
 
       setUnits(
-        Array.isArray(loadedUnits)
-          ? loadedUnits
+        Array.isArray(unitsData)
+          ? unitsData
           : [],
       );
 
       if (
-        !Array.isArray(loadedUnits) ||
-        loadedUnits.length === 0
+        !Array.isArray(unitsData) ||
+        unitsData.length === 0
       ) {
         return;
       }
 
-      const unitId =
-        loadedUnits[0].id;
+      const unitId = unitsData[0].id;
 
       setSelectedUnitId(unitId);
 
-      const loadedLessons =
+      const lessonsData =
         await apiClient.getUnitLessons(
           unitId,
         );
 
       setLessons(
-        Array.isArray(loadedLessons)
-          ? loadedLessons
+        Array.isArray(lessonsData)
+          ? lessonsData
           : [],
       );
     } catch (err) {
       console.error(
-        'Term change failed:',
+        "Term selection failed:",
         err,
       );
 
       setError(
-        'تعذر تحميل مواد الفصل المحدد.',
+        "تعذر تحميل مواد الفصل.",
       );
     } finally {
       setLoading(false);
@@ -565,59 +570,52 @@ const AdminDashboard: React.FC = () => {
   const handleSubjectChange = async (
     subjectId: number,
   ) => {
-    setSelectedSubjectId(
-      subjectId,
-    );
+    setSelectedSubjectId(subjectId);
 
-    setSelectedUnitId(null);
-    setUnits([]);
-    setLessons([]);
+    resetFromSubject();
 
     setLoading(true);
     setError(null);
 
     try {
-      const loadedUnits =
+      const data =
         await apiClient.getUnits(
           subjectId,
         );
 
       setUnits(
-        Array.isArray(loadedUnits)
-          ? loadedUnits
-          : [],
+        Array.isArray(data) ? data : [],
       );
 
       if (
-        !Array.isArray(loadedUnits) ||
-        loadedUnits.length === 0
+        !Array.isArray(data) ||
+        data.length === 0
       ) {
         return;
       }
 
-      const unitId =
-        loadedUnits[0].id;
+      const unitId = data[0].id;
 
       setSelectedUnitId(unitId);
 
-      const loadedLessons =
+      const lessonsData =
         await apiClient.getUnitLessons(
           unitId,
         );
 
       setLessons(
-        Array.isArray(loadedLessons)
-          ? loadedLessons
+        Array.isArray(lessonsData)
+          ? lessonsData
           : [],
       );
     } catch (err) {
       console.error(
-        'Subject change failed:',
+        "Subject selection failed:",
         err,
       );
 
       setError(
-        'تعذر تحميل وحدات المادة.',
+        "تعذر تحميل وحدات المادة.",
       );
     } finally {
       setLoading(false);
@@ -628,49 +626,774 @@ const AdminDashboard: React.FC = () => {
     unitId: number,
   ) => {
     setSelectedUnitId(unitId);
-    setLessons([]);
+
+    resetFromUnit();
 
     setLoading(true);
     setError(null);
 
     try {
-      const loadedLessons =
+      const data =
         await apiClient.getUnitLessons(
           unitId,
         );
 
       setLessons(
-        Array.isArray(loadedLessons)
-          ? loadedLessons
-          : [],
+        Array.isArray(data) ? data : [],
       );
     } catch (err) {
       console.error(
-        'Unit change failed:',
+        "Unit selection failed:",
         err,
       );
 
       setError(
-        'تعذر تحميل دروس الوحدة.',
+        "تعذر تحميل دروس الوحدة.",
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const connectionClass =
-    connection.status === 'connected'
-      ? 'border-emerald-500/30 bg-emerald-500/10'
-      : connection.status === 'error'
-        ? 'border-red-500/30 bg-red-500/10'
-        : 'border-amber-500/30 bg-amber-500/10';
+  const loadLesson = async (
+    lessonId: number,
+  ) => {
+    setSelectedLessonId(lessonId);
+    setLessonLoading(true);
+    setError(null);
 
-  const connectionIcon =
-    connection.status === 'connected'
-      ? '✓'
-      : connection.status === 'error'
-        ? '!'
-        : '…';
+    try {
+      const [
+        lesson,
+        blocks,
+        lessonAssets,
+        lessonObjectives,
+        lessonVocabulary,
+        lessonConcepts,
+        lessonQuestions,
+        lessonSources,
+      ] = await Promise.all([
+        apiClient.getLesson(lessonId),
+        apiClient.getLessonContent(
+          lessonId,
+        ),
+        apiClient.getLessonAssets(
+          lessonId,
+        ),
+        apiClient.getLessonObjectives(
+          lessonId,
+        ),
+        apiClient.getLessonVocabulary(
+          lessonId,
+        ),
+        apiClient.getLessonConcepts(
+          lessonId,
+        ),
+        apiClient.getLessonQuestions(
+          lessonId,
+        ),
+        apiClient.getLessonSources(
+          lessonId,
+        ),
+      ]);
+
+      setSelectedLesson(lesson);
+      setContentBlocks(
+        Array.isArray(blocks)
+          ? blocks
+          : [],
+      );
+      setAssets(
+        Array.isArray(lessonAssets)
+          ? lessonAssets
+          : [],
+      );
+      setObjectives(
+        Array.isArray(lessonObjectives)
+          ? lessonObjectives
+          : [],
+      );
+      setVocabulary(
+        Array.isArray(lessonVocabulary)
+          ? lessonVocabulary
+          : [],
+      );
+      setConcepts(
+        Array.isArray(lessonConcepts)
+          ? lessonConcepts
+          : [],
+      );
+      setQuestions(
+        Array.isArray(lessonQuestions)
+          ? lessonQuestions
+          : [],
+      );
+      setSources(
+        Array.isArray(lessonSources)
+          ? lessonSources
+          : [],
+      );
+
+      setActiveTab("lesson");
+    } catch (err) {
+      console.error(
+        "Lesson loading failed:",
+        err,
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "تعذر تحميل محتوى الدرس.",
+      );
+    } finally {
+      setLessonLoading(false);
+    }
+  };
+
+  const openLesson = (
+    lesson: Lesson,
+  ) => {
+    void loadLesson(lesson.id);
+  };
+
+  const connectionLabel =
+    connection === "connected"
+      ? "متصل"
+      : connection === "error"
+        ? "خطأ في الاتصال"
+        : "جاري الاختبار";
+
+  const connectionClass =
+    connection === "connected"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+      : connection === "error"
+        ? "border-red-500/30 bg-red-500/10 text-red-400"
+        : "border-amber-500/30 bg-amber-500/10 text-amber-400";
+
+  const contentStats = [
+    {
+      label: "الدروس",
+      value: lessons.length,
+      icon: "📖",
+    },
+    {
+      label: "Blocks",
+      value: contentBlocks.length,
+      icon: "🧩",
+    },
+    {
+      label: "Assets",
+      value: assets.length,
+      icon: "🖼️",
+    },
+    {
+      label: "أسئلة",
+      value: questions.length,
+      icon: "❓",
+    },
+    {
+      label: "أهداف",
+      value: objectives.length,
+      icon: "🎯",
+    },
+    {
+      label: "مفردات",
+      value: vocabulary.length,
+      icon: "🔤",
+    },
+  ];
+
+  const tabs: Array<{
+    id: ContentTab;
+    label: string;
+    count?: number;
+  }> = [
+    {
+      id: "lesson",
+      label: "الدرس",
+    },
+    {
+      id: "blocks",
+      label: "المحتوى",
+      count: contentBlocks.length,
+    },
+    {
+      id: "assets",
+      label: "الوسائط",
+      count: assets.length,
+    },
+    {
+      id: "objectives",
+      label: "الأهداف",
+      count: objectives.length,
+    },
+    {
+      id: "vocabulary",
+      label: "المفردات",
+      count: vocabulary.length,
+    },
+    {
+      id: "concepts",
+      label: "المفاهيم",
+      count: concepts.length,
+    },
+    {
+      id: "questions",
+      label: "الأسئلة",
+      count: questions.length,
+    },
+    {
+      id: "sources",
+      label: "المصادر",
+      count: sources.length,
+    },
+  ];
+
+  const renderEmpty = (
+    message: string,
+  ) => (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-8 text-center">
+      <div className="text-3xl mb-3">
+        📭
+      </div>
+
+      <p className="text-sm text-slate-400">
+        {message}
+      </p>
+    </div>
+  );
+
+  const renderBlocks = () => {
+    if (contentBlocks.length === 0) {
+      return renderEmpty(
+        "لا توجد Content Blocks منشورة لهذا الدرس.",
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {contentBlocks.map(
+          (block, index) => (
+            <article
+              key={block.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+            >
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-xs font-black text-amber-400">
+                  #{index + 1}{" "}
+                  {block.block_type}
+                </span>
+
+                <span
+                  className={
+                    block.is_published
+                      ? "text-xs text-emerald-400"
+                      : "text-xs text-slate-500"
+                  }
+                >
+                  {block.is_published
+                    ? "Published"
+                    : "Draft"}
+                </span>
+              </div>
+
+              <pre className="overflow-auto rounded-xl bg-slate-950 border border-slate-800 p-4 text-xs text-slate-300 leading-6 text-left" dir="ltr">
+                {JSON.stringify(
+                  block.content,
+                  null,
+                  2,
+                )}
+              </pre>
+            </article>
+          ),
+        )}
+      </div>
+    );
+  };
+
+  const renderAssets = () => {
+    if (assets.length === 0) {
+      return renderEmpty(
+        "لا توجد وسائط مرتبطة بهذا الدرس.",
+      );
+    }
+
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        {assets.map((asset) => (
+          <article
+            key={asset.id}
+            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs text-amber-400 font-black">
+                  {asset.asset_type}
+                </p>
+
+                <h3 className="font-black mt-1">
+                  {asset.title ||
+                    "بدون عنوان"}
+                </h3>
+              </div>
+
+              <span className="text-xs text-slate-500">
+                #{asset.sort_order}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-400 mt-4 break-all">
+              {asset.url}
+            </p>
+
+            {asset.alt_text && (
+              <p className="text-xs text-slate-500 mt-2">
+                ALT: {asset.alt_text}
+              </p>
+            )}
+
+            <div className="mt-4">
+              <span
+                className={
+                  asset.is_published
+                    ? "text-xs text-emerald-400"
+                    : "text-xs text-slate-500"
+                }
+              >
+                {asset.is_published
+                  ? "Published"
+                  : "Draft"}
+              </span>
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+  };
+
+  const renderObjectives = () => {
+    if (objectives.length === 0) {
+      return renderEmpty(
+        "لا توجد أهداف تعليمية لهذا الدرس.",
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {objectives.map(
+          (objective) => (
+            <article
+              key={objective.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+            >
+              <div className="flex items-center gap-3 mb-2">
+                {objective.objective_code && (
+                  <span className="text-xs text-amber-400 font-black">
+                    {objective.objective_code}
+                  </span>
+                )}
+
+                {objective.cognitive_level && (
+                  <span className="text-xs text-slate-500">
+                    {objective.cognitive_level}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-sm text-slate-200 leading-7">
+                {objective.statement}
+              </p>
+            </article>
+          ),
+        )}
+      </div>
+    );
+  };
+
+  const renderVocabulary = () => {
+    if (vocabulary.length === 0) {
+      return renderEmpty(
+        "لا توجد مفردات لهذا الدرس.",
+      );
+    }
+
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        {vocabulary.map((item) => (
+          <article
+            key={item.id}
+            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+          >
+            <h3 className="font-black text-amber-400">
+              {item.term}
+            </h3>
+
+            {item.definition && (
+              <p className="text-sm text-slate-300 mt-2 leading-6">
+                {item.definition}
+              </p>
+            )}
+
+            {item.pronunciation && (
+              <p className="text-xs text-slate-500 mt-2">
+                النطق:{" "}
+                {item.pronunciation}
+              </p>
+            )}
+
+            {item.example && (
+              <p className="text-xs text-slate-400 mt-2 leading-6">
+                مثال: {item.example}
+              </p>
+            )}
+          </article>
+        ))}
+      </div>
+    );
+  };
+
+  const renderConcepts = () => {
+    if (concepts.length === 0) {
+      return renderEmpty(
+        "لا توجد مفاهيم مرتبطة بهذا الدرس.",
+      );
+    }
+
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        {concepts.map((concept) => (
+          <article
+            key={concept.id}
+            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-black text-slate-100">
+                {concept.name}
+              </h3>
+
+              {concept.is_primary && (
+                <span className="text-[10px] font-black text-amber-400">
+                  PRIMARY
+                </span>
+              )}
+            </div>
+
+            {concept.description && (
+              <p className="text-sm text-slate-400 mt-2 leading-6">
+                {concept.description}
+              </p>
+            )}
+          </article>
+        ))}
+      </div>
+    );
+  };
+
+  const renderQuestions = () => {
+    if (questions.length === 0) {
+      return renderEmpty(
+        "لا توجد أسئلة منشورة مرتبطة بهذا الدرس.",
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {questions.map(
+          (question, index) => (
+            <article
+              key={question.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+            >
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="text-xs font-black text-amber-400">
+                  السؤال {index + 1}
+                </span>
+
+                <span className="text-[10px] text-slate-500">
+                  {question.question_type}
+                </span>
+
+                {question.difficulty && (
+                  <span className="text-[10px] text-slate-500">
+                    {question.difficulty}
+                  </span>
+                )}
+
+                {question.status && (
+                  <span className="text-[10px] text-emerald-400">
+                    {question.status}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-sm text-slate-100 leading-7">
+                {question.prompt}
+              </p>
+
+              {question.options.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {question.options.map(
+                    (option) => (
+                      <div
+                        key={option.id}
+                        className="rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-xs text-slate-300"
+                      >
+                        <strong className="text-amber-400">
+                          {option.option_key}
+                        </strong>{" "}
+                        {option.option_text}
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+
+              {question.explanation && (
+                <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-4">
+                  <p className="text-[10px] text-slate-500 mb-1">
+                    الشرح
+                  </p>
+
+                  <p className="text-xs text-slate-400 leading-6">
+                    {question.explanation}
+                  </p>
+                </div>
+              )}
+            </article>
+          ),
+        )}
+      </div>
+    );
+  };
+
+  const renderSources = () => {
+    if (sources.length === 0) {
+      return renderEmpty(
+        "لا توجد مصادر مرتبطة بهذا الدرس.",
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {sources.map((source) => (
+          <article
+            key={source.id}
+            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-black">
+                {source.name}
+              </h3>
+
+              <span className="text-xs text-amber-400">
+                {source.source_type}
+              </span>
+            </div>
+
+            {source.publisher && (
+              <p className="text-xs text-slate-500 mt-2">
+                الناشر:{" "}
+                {source.publisher}
+              </p>
+            )}
+
+            {source.edition && (
+              <p className="text-xs text-slate-500 mt-1">
+                الإصدار:{" "}
+                {source.edition}
+              </p>
+            )}
+
+            {source.academic_year && (
+              <p className="text-xs text-slate-500 mt-1">
+                العام الدراسي:{" "}
+                {source.academic_year}
+              </p>
+            )}
+
+            {source.source_url && (
+              <a
+                href={source.source_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block text-xs text-blue-400 hover:text-blue-300 mt-3 break-all"
+              >
+                {source.source_url}
+              </a>
+            )}
+
+            {source.rights_notes && (
+              <p className="text-xs text-slate-500 mt-3 leading-6">
+                الحقوق:{" "}
+                {source.rights_notes}
+              </p>
+            )}
+          </article>
+        ))}
+      </div>
+    );
+  };
+
+  const renderLessonTab = () => {
+    if (!selectedLesson) {
+      return renderEmpty(
+        "اختر درسًا من القائمة لبدء إدارة محتواه.",
+      );
+    }
+
+    return (
+      <div className="space-y-5">
+        <section className="rounded-3xl border border-amber-500/20 bg-slate-900 p-6">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
+            <div>
+              <span className="text-xs font-black text-amber-400">
+                LESSON #{selectedLesson.id}
+              </span>
+
+              <h2 className="text-2xl font-black mt-2">
+                {selectedLesson.title}
+              </h2>
+
+              {selectedLesson.content_summary && (
+                <p className="text-sm text-slate-400 mt-3 leading-7 max-w-3xl">
+                  {
+                    selectedLesson.content_summary
+                  }
+                </p>
+              )}
+            </div>
+
+            <Link
+              to={`/lesson/${selectedLesson.id}`}
+              className="shrink-0 inline-flex items-center justify-center rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-3 text-xs font-black text-amber-400 hover:bg-amber-500/20 transition"
+            >
+              فتح الدرس كطالب
+            </Link>
+          </div>
+        </section>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs text-slate-500">
+              Lesson Number
+            </p>
+            <p className="text-2xl font-black text-amber-400 mt-2">
+              {selectedLesson.lesson_number}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs text-slate-500">
+              Content Blocks
+            </p>
+            <p className="text-2xl font-black mt-2">
+              {contentBlocks.length}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs text-slate-500">
+              Assets
+            </p>
+            <p className="text-2xl font-black mt-2">
+              {assets.length}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+            <p className="text-xs text-slate-500">
+              Questions
+            </p>
+            <p className="text-2xl font-black mt-2">
+              {questions.length}
+            </p>
+          </div>
+        </div>
+
+        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
+          <h3 className="text-lg font-black">
+            روابط المحتوى الحالية
+          </h3>
+
+          <div className="grid gap-3 md:grid-cols-3 mt-4">
+            {[
+              {
+                label: "Video",
+                value:
+                  selectedLesson.video_url,
+              },
+              {
+                label: "Infographic",
+                value:
+                  selectedLesson.infographic_url,
+              },
+              {
+                label: "Game",
+                value:
+                  selectedLesson.game_url,
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className="rounded-2xl border border-slate-800 bg-slate-950 p-4"
+              >
+                <p className="text-[10px] text-slate-500 font-black">
+                  {item.label}
+                </p>
+
+                {item.value ? (
+                  <a
+                    href={item.value}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-xs text-blue-400 hover:text-blue-300 mt-2 break-all"
+                  >
+                    {item.value}
+                  </a>
+                ) : (
+                  <p className="text-xs text-slate-600 mt-2">
+                    غير موجود
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  };
+
+  const renderActiveTab = () => {
+    switch (activeTab) {
+      case "lesson":
+        return renderLessonTab();
+
+      case "blocks":
+        return renderBlocks();
+
+      case "assets":
+        return renderAssets();
+
+      case "objectives":
+        return renderObjectives();
+
+      case "vocabulary":
+        return renderVocabulary();
+
+      case "concepts":
+        return renderConcepts();
+
+      case "questions":
+        return renderQuestions();
+
+      case "sources":
+        return renderSources();
+
+      default:
+        return renderLessonTab();
+    }
+  };
 
   return (
     <main
@@ -678,879 +1401,480 @@ const AdminDashboard: React.FC = () => {
       className="min-h-screen bg-slate-950 text-slate-100"
     >
       <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8">
-        <header className="mb-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-black text-amber-400">
-                🛡️ Super Admin
-              </div>
 
-              <h1 className="mt-3 text-3xl md:text-4xl font-black text-white">
-                لوحة إدارة The Tutor
+        {/* Header */}
+
+        <header className="mb-7">
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+            <div>
+              <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-black text-amber-400">
+                ADMIN CONTENT MANAGEMENT
+              </span>
+
+              <h1 className="text-3xl md:text-4xl font-black mt-3">
+                إدارة المحتوى التعليمي
               </h1>
 
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-400">
-                مركز التحكم الرئيسي لإدارة المحتوى
-                والمشتركين ومتابعة حالة المنصة.
+              <p className="text-sm text-slate-500 mt-2 leading-7 max-w-3xl">
+                إدارة واستعراض المنهج والمحتوى المرتبط
+                بالدروس من المصدر الأساسي للبيانات.
               </p>
             </div>
 
-            <Link
-              to="/"
-              className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-bold text-slate-300 transition hover:border-amber-500/50 hover:text-amber-400"
-            >
-              العودة للرئيسية
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to="/"
+                className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-xs font-bold text-slate-300 hover:border-slate-700"
+              >
+                الرئيسية
+              </Link>
+
+              <button
+                type="button"
+                onClick={() =>
+                  void checkConnection()
+                }
+                className={`rounded-xl border px-4 py-2 text-xs font-black ${connectionClass}`}
+              >
+                {connectionLabel}
+              </button>
+            </div>
           </div>
         </header>
 
-        <nav className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <button
-            type="button"
-            onClick={() =>
-              setSection('overview')
-            }
-            className={`rounded-2xl border p-4 text-right transition ${
-              section === 'overview'
-                ? 'border-amber-500 bg-amber-500/10'
-                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-            }`}
-          >
-            <div className="text-xl">
-              📊
-            </div>
-
-            <div className="mt-2 font-black">
-              نظرة عامة
-            </div>
-
-            <div className="mt-1 text-xs text-slate-500">
-              حالة المنصة
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              setSection('content')
-            }
-            className={`rounded-2xl border p-4 text-right transition ${
-              section === 'content'
-                ? 'border-amber-500 bg-amber-500/10'
-                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-            }`}
-          >
-            <div className="text-xl">
-              📚
-            </div>
-
-            <div className="mt-2 font-black">
-              إدارة المحتوى
-            </div>
-
-            <div className="mt-1 text-xs text-slate-500">
-              المناهج والدروس
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              setSection('subscribers')
-            }
-            className={`rounded-2xl border p-4 text-right transition ${
-              section === 'subscribers'
-                ? 'border-amber-500 bg-amber-500/10'
-                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-            }`}
-          >
-            <div className="text-xl">
-              👥
-            </div>
-
-            <div className="mt-2 font-black">
-              إدارة المشتركين
-            </div>
-
-            <div className="mt-1 text-xs text-slate-500">
-              الطلاب وأولياء الأمور
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              setSection('server')
-            }
-            className={`rounded-2xl border p-4 text-right transition ${
-              section === 'server'
-                ? 'border-amber-500 bg-amber-500/10'
-                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
-            }`}
-          >
-            <div className="text-xl">
-              🖥️
-            </div>
-
-            <div className="mt-2 font-black">
-              إدارة المنصة
-            </div>
-
-            <div className="mt-1 text-xs text-slate-500">
-              الاتصال وحالة السيرفر
-            </div>
-          </button>
-        </nav>
-
-        {error && (
-          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
-            {error}
-          </div>
-        )}
-
-        {section === 'overview' && (
-          <section className="space-y-6">
-            <div
-              className={`rounded-2xl border p-5 ${connectionClass}`}
-            >
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-950/50 text-xl font-black">
-                    {connectionIcon}
-                  </div>
-
-                  <div>
-                    <h2 className="font-black">
-                      اتصال الـBackend
-                    </h2>
-
-                    <p className="mt-1 text-sm text-slate-400">
-                      {connection.message}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={testServerConnection}
-                  disabled={
-                    connection.status ===
-                    'checking'
-                  }
-                  className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {connection.status ===
-                  'checking'
-                    ? 'جاري الاختبار...'
-                    : 'اختبار الاتصال'}
-                </button>
-              </div>
-
-              {lastCheckedAt && (
-                <p className="mt-4 text-xs text-slate-500">
-                  آخر اختبار: {lastCheckedAt}
-                </p>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="text-2xl">
-                  🎓
-                </div>
-
-                <p className="mt-3 text-xs text-slate-500">
-                  الصفوف الدراسية
-                </p>
-
-                <p className="mt-1 text-3xl font-black text-amber-400">
-                  {grades.length}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="text-2xl">
-                  📖
-                </div>
-
-                <p className="mt-3 text-xs text-slate-500">
-                  الفصول
-                </p>
-
-                <p className="mt-1 text-3xl font-black text-amber-400">
-                  {terms.length}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="text-2xl">
-                  📚
-                </div>
-
-                <p className="mt-3 text-xs text-slate-500">
-                  المواد الحالية
-                </p>
-
-                <p className="mt-1 text-3xl font-black text-amber-400">
-                  {subjects.length}
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="text-2xl">
-                  📝
-                </div>
-
-                <p className="mt-3 text-xs text-slate-500">
-                  دروس الوحدة الحالية
-                </p>
-
-                <p className="mt-1 text-3xl font-black text-amber-400">
-                  {lessons.length}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-              <h2 className="text-xl font-black">
-                حالة المنصة
-              </h2>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-3">
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                  <p className="text-xs text-slate-500">
-                    قاعدة البيانات
-                  </p>
-
-                  <p className="mt-2 font-black text-emerald-400">
-                    متصلة عبر الـBackend
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                  <p className="text-xs text-slate-500">
-                    طبقة الـAPI
-                  </p>
-
-                  <p
-                    className={`mt-2 font-black ${
-                      connection.status ===
-                      'connected'
-                        ? 'text-emerald-400'
-                        : connection.status ===
-                            'error'
-                          ? 'text-red-400'
-                          : 'text-amber-400'
-                    }`}
-                  >
-                    {connection.status ===
-                    'connected'
-                      ? 'تعمل'
-                      : connection.status ===
-                          'error'
-                        ? 'خطأ'
-                        : 'جاري الفحص'}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                  <p className="text-xs text-slate-500">
-                    إدارة المحتوى
-                  </p>
-
-                  <p className="mt-2 font-black text-amber-400">
-                    جاهزة للتطوير
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {section === 'content' && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-2xl font-black">
-                    إدارة المحتوى
-                  </h2>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-400">
-                    اختر مستوى المنهج للوصول إلى
-                    المواد والوحدات والدروس.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={loadCurriculum}
-                  disabled={loading}
-                  className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-bold hover:border-amber-500/50 disabled:opacity-50"
-                >
-                  {loading
-                    ? 'جاري التحديث...'
-                    : 'تحديث المنهج'}
-                </button>
-              </div>
-
-              <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <label className="block">
-                  <span className="mb-2 block text-xs font-bold text-slate-500">
-                    الصف الدراسي
-                  </span>
-
-                  <select
-                    value={
-                      selectedGradeId ?? ''
-                    }
-                    onChange={(event) =>
-                      handleGradeChange(
-                        Number(
-                          event.target.value,
-                        ),
-                      )
-                    }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-amber-500"
-                  >
-                    {grades.map((grade) => (
-                      <option
-                        key={grade.id}
-                        value={grade.id}
-                      >
-                        {grade.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="mb-2 block text-xs font-bold text-slate-500">
-                    الفصل الدراسي
-                  </span>
-
-                  <select
-                    value={
-                      selectedTermId ?? ''
-                    }
-                    onChange={(event) =>
-                      handleTermChange(
-                        Number(
-                          event.target.value,
-                        ),
-                      )
-                    }
-                    disabled={
-                      terms.length === 0
-                    }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-amber-500 disabled:opacity-50"
-                  >
-                    {terms.map((term) => (
-                      <option
-                        key={term.id}
-                        value={term.id}
-                      >
-                        {term.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="mb-2 block text-xs font-bold text-slate-500">
-                    المادة
-                  </span>
-
-                  <select
-                    value={
-                      selectedSubjectId ??
-                      ''
-                    }
-                    onChange={(event) =>
-                      handleSubjectChange(
-                        Number(
-                          event.target.value,
-                        ),
-                      )
-                    }
-                    disabled={
-                      subjects.length === 0
-                    }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-amber-500 disabled:opacity-50"
-                  >
-                    {subjects.map(
-                      (subject) => (
-                        <option
-                          key={subject.id}
-                          value={subject.id}
-                        >
-                          {subject.title}
-                        </option>
-                      ),
-                    )}
-                  </select>
-                </label>
-
-                <label className="block">
-                  <span className="mb-2 block text-xs font-bold text-slate-500">
-                    الوحدة
-                  </span>
-
-                  <select
-                    value={
-                      selectedUnitId ?? ''
-                    }
-                    onChange={(event) =>
-                      handleUnitChange(
-                        Number(
-                          event.target.value,
-                        ),
-                      )
-                    }
-                    disabled={
-                      units.length === 0
-                    }
-                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-amber-500 disabled:opacity-50"
-                  >
-                    {units.map((unit) => (
-                      <option
-                        key={unit.id}
-                        value={unit.id}
-                      >
-                        {unit.unit_number}.{' '}
-                        {unit.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-              <div className="mb-5">
-                <h3 className="text-xl font-black">
-                  المسار الحالي
-                </h3>
-
-                <p className="mt-2 text-sm text-slate-400">
-                  {selectedGrade?.title ??
-                    '—'}
-                  {' / '}
-                  {selectedTerm?.title ??
-                    '—'}
-                  {' / '}
-                  {selectedSubject?.title ??
-                    '—'}
-                  {' / '}
-                  {selectedUnit?.title ??
-                    '—'}
-                </p>
-              </div>
-
-              {lessons.length === 0 ? (
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
-                  <p className="text-slate-400">
-                    لا توجد دروس متاحة في
-                    الوحدة الحالية.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  {lessons.map(
-                    (lesson) => (
-                      <Link
-                        key={lesson.id}
-                        to={`/lesson/${lesson.id}`}
-                        className="group rounded-xl border border-slate-800 bg-slate-950 p-4 transition hover:border-amber-500/50"
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 font-black text-slate-950">
-                            {
-                              lesson.lesson_number
-                            }
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <h4 className="font-black text-slate-100 group-hover:text-amber-400">
-                              {lesson.title}
-                            </h4>
-
-                            {lesson.content_summary && (
-                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
-                                {
-                                  lesson.content_summary
-                                }
-                              </p>
-                            )}
-
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {lesson.video_url && (
-                                <span className="rounded-full bg-sky-500/10 px-2 py-1 text-[11px] font-bold text-sky-400">
-                                  🎥 فيديو
-                                </span>
-                              )}
-
-                              {lesson.infographic_url && (
-                                <span className="rounded-full bg-violet-500/10 px-2 py-1 text-[11px] font-bold text-violet-400">
-                                  🖼️ إنفوجرافيك
-                                </span>
-                              )}
-
-                              {lesson.game_url && (
-                                <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-bold text-emerald-400">
-                                  🎮 لعبة
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <span className="text-amber-400">
-                            ◀
-                          </span>
-                        </div>
-                      </Link>
-                    ),
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="text-2xl">
-                  📝
-                </div>
-
-                <h3 className="mt-3 font-black">
-                  إدارة الدروس
-                </h3>
-
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  افتح الدرس لمراجعة محتواه
-                  وموارده من خلال صفحات الدرس
-                  الحالية.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="text-2xl">
-                  🖼️
-                </div>
-
-                <h3 className="mt-3 font-black">
-                  الإنفوجرافيك والـAssets
-                </h3>
-
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  الـDatabase تدعم
-                  lesson_assets وcontent blocks.
-                  واجهة الإدارة التفصيلية ستُربط
-                  بها في مرحلة إدارة المحتوى.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="text-2xl">
-                  🎮
-                </div>
-
-                <h3 className="mt-3 font-black">
-                  الألعاب
-                </h3>
-
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  نظام الألعاب يعتمد على
-                  game_templates و
-                  game_definitions والأسئلة
-                  المرتبطة بها.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="text-2xl">
-                  ❓
-                </div>
-
-                <h3 className="mt-3 font-black">
-                  الأسئلة
-                </h3>
-
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  بنك الأسئلة مستقل ويرتبط
-                  بالدروس والألعاب والتحديات.
-                </p>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {section === 'subscribers' && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-2xl">
-                  👥
-                </div>
-
-                <div>
-                  <h2 className="text-2xl font-black">
-                    إدارة المشتركين
-                  </h2>
-
-                  <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-400">
-                    هذا القسم مخصص لإدارة الطلاب
-                    وأولياء الأمور والاشتراكات
-                    والعلاقات بينهم.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-                <div className="text-2xl">
-                  🎓
-                </div>
-
-                <h3 className="mt-4 font-black">
-                  الطلاب
-                </h3>
-
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  إضافة وإدارة حسابات الطلاب
-                  وإيقاف أو إعادة تفعيل الحسابات.
-                </p>
-
-                <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-300">
-                  واجهة الإدارة جاهزة معماريًا،
-                  لكن Endpoint الإدارة الإدارية
-                  للطلاب غير موجود في الـAPI الحالي
-                  بعد.
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-                <div className="text-2xl">
-                  👨‍👩‍👧
-                </div>
-
-                <h3 className="mt-4 font-black">
-                  أولياء الأمور
-                </h3>
-
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  إنشاء وإدارة أولياء الأمور
-                  وربطهم بالطلاب.
-                </p>
-
-                <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-300">
-                  نظام parent invitations و
-                  parent_students موجود في
-                  الـBackend والـDatabase.
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-                <div className="text-2xl">
-                  💳
-                </div>
-
-                <h3 className="mt-4 font-black">
-                  الاشتراكات
-                </h3>
-
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  متابعة الخطط وحالة الاشتراكات
-                  والتواريخ ومزود الدفع.
-                </p>
-
-                <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-300">
-                  جداول plans وsubscriptions
-                  موجودة في قاعدة البيانات، لكن
-                  Admin API الخاص بها يحتاج
-                  Endpoint مخصص.
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950 p-6">
-              <h3 className="font-black">
-                ملاحظة تنفيذية
-              </h3>
-
-              <p className="mt-3 text-sm leading-7 text-slate-400">
-                لن تقوم هذه الصفحة باستدعاء جداول
-                profiles أو subscriptions مباشرة من
-                المتصفح، ولن نضع service-role key
-                في الـFrontend. إدارة هذه البيانات
-                يجب أن تمر عبر Admin API محمي في
-                الـBackend.
+        {/* Server status */}
+
+        <section
+          className={`rounded-2xl border px-5 py-4 mb-6 ${connectionClass}`}
+        >
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+            <div>
+              <p className="text-xs font-black">
+                اتصال الـBackend
+              </p>
+
+              <p className="text-xs opacity-80 mt-1">
+                {connection ===
+                "connected"
+                  ? "الخدمة متاحة."
+                  : connection === "error"
+                    ? "تعذر الوصول إلى الخدمة."
+                    : "جاري التحقق من الخدمة..."}
               </p>
             </div>
+
+            {lastChecked && (
+              <span className="text-[10px] opacity-60">
+                آخر اختبار:{" "}
+                {lastChecked}
+              </span>
+            )}
+          </div>
+        </section>
+
+        {/* Curriculum selector */}
+
+        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 md:p-6 mb-6">
+          <div className="flex items-center justify-between gap-3 mb-5">
+            <div>
+              <h2 className="font-black">
+                اختيار المحتوى
+              </h2>
+
+              <p className="text-xs text-slate-500 mt-1">
+                Grade → Term → Subject → Unit → Lesson
+              </p>
+            </div>
+
+            {loading && (
+              <span className="text-xs text-amber-400 animate-pulse">
+                جاري التحميل...
+              </span>
+            )}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+
+            <select
+              value={selectedGradeId ?? ""}
+              onChange={(event) =>
+                void handleGradeChange(
+                  Number(event.target.value),
+                )
+              }
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none focus:border-amber-500"
+            >
+              <option value="">
+                اختر الصف
+              </option>
+
+              {grades.map((grade) => (
+                <option
+                  key={grade.id}
+                  value={grade.id}
+                >
+                  {grade.title}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={selectedTermId ?? ""}
+              onChange={(event) =>
+                void handleTermChange(
+                  Number(event.target.value),
+                )
+              }
+              disabled={terms.length === 0}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
+            >
+              <option value="">
+                اختر الفصل
+              </option>
+
+              {terms.map((term) => (
+                <option
+                  key={term.id}
+                  value={term.id}
+                >
+                  {term.title}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={
+                selectedSubjectId ?? ""
+              }
+              onChange={(event) =>
+                void handleSubjectChange(
+                  Number(event.target.value),
+                )
+              }
+              disabled={
+                subjects.length === 0
+              }
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
+            >
+              <option value="">
+                اختر المادة
+              </option>
+
+              {subjects.map(
+                (subject) => (
+                  <option
+                    key={subject.id}
+                    value={subject.id}
+                  >
+                    {subject.title}
+                  </option>
+                ),
+              )}
+            </select>
+
+            <select
+              value={
+                selectedUnitId ?? ""
+              }
+              onChange={(event) =>
+                void handleUnitChange(
+                  Number(event.target.value),
+                )
+              }
+              disabled={units.length === 0}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
+            >
+              <option value="">
+                اختر الوحدة
+              </option>
+
+              {units.map((unit) => (
+                <option
+                  key={unit.id}
+                  value={unit.id}
+                >
+                  {unit.unit_number}.{" "}
+                  {unit.title}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={
+                selectedLessonId ?? ""
+              }
+              onChange={(event) => {
+                const id = Number(
+                  event.target.value,
+                );
+
+                const lesson =
+                  lessons.find(
+                    (item) =>
+                      item.id === id,
+                  );
+
+                if (lesson) {
+                  openLesson(lesson);
+                }
+              }}
+              disabled={lessons.length === 0}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
+            >
+              <option value="">
+                اختر الدرس
+              </option>
+
+              {lessons.map(
+                (lesson) => (
+                  <option
+                    key={lesson.id}
+                    value={lesson.id}
+                  >
+                    {lesson.lesson_number}.{" "}
+                    {lesson.title}
+                  </option>
+                ),
+              )}
+            </select>
+          </div>
+
+          {(selectedGrade ||
+            selectedTerm ||
+            selectedSubject ||
+            selectedUnit) && (
+            <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-slate-800">
+              {selectedGrade && (
+                <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
+                  {selectedGrade.title}
+                </span>
+              )}
+
+              {selectedTerm && (
+                <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
+                  {selectedTerm.title}
+                </span>
+              )}
+
+              {selectedSubject && (
+                <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
+                  {selectedSubject.title}
+                </span>
+              )}
+
+              {selectedUnit && (
+                <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
+                  {selectedUnit.title}
+                </span>
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Error */}
+
+        {error && (
+          <section
+            className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 mb-6"
+            role="alert"
+          >
+            <p className="text-sm font-black text-red-400">
+              حدث خطأ
+            </p>
+
+            <p className="text-xs text-red-300/80 mt-2 leading-6">
+              {error}
+            </p>
           </section>
         )}
 
-        {section === 'server' && (
-          <section className="space-y-6">
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-              <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-bold text-sky-400">
-                    🖥️ Platform Health
-                  </div>
+        {/* Stats */}
 
-                  <h2 className="mt-3 text-2xl font-black">
-                    إدارة المنصة والسيرفر
-                  </h2>
-
-                  <p className="mt-2 text-sm leading-7 text-slate-400">
-                    اختبارات الاتصال الأساسية التي
-                    يمكن تنفيذها الآن من خلال الـAPI.
-                  </p>
+        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+          {contentStats.map(
+            (stat) => (
+              <div
+                key={stat.label}
+                className="rounded-2xl border border-slate-800 bg-slate-900 p-4"
+              >
+                <div className="text-xl">
+                  {stat.icon}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={testServerConnection}
-                  disabled={
-                    connection.status ===
-                    'checking'
-                  }
-                  className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 hover:bg-amber-400 disabled:opacity-50"
-                >
-                  {connection.status ===
-                  'checking'
-                    ? 'جاري الاختبار...'
-                    : 'تشغيل اختبار الاتصال'}
-                </button>
-              </div>
-            </div>
-
-            <div
-              className={`rounded-2xl border p-6 ${connectionClass}`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950/50 text-2xl font-black">
-                  {connectionIcon}
-                </div>
-
-                <div>
-                  <h3 className="font-black">
-                    Backend Health Check
-                  </h3>
-
-                  <p className="mt-1 text-sm text-slate-400">
-                    {connection.message}
-                  </p>
-
-                  {lastCheckedAt && (
-                    <p className="mt-2 text-xs text-slate-500">
-                      آخر فحص: {lastCheckedAt}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-                <div className="text-2xl">
-                  🔌
-                </div>
-
-                <h3 className="mt-4 font-black">
-                  Backend
-                </h3>
-
-                <p className="mt-2 text-sm text-slate-500">
-                  FastAPI
+                <p className="text-[10px] text-slate-500 mt-3">
+                  {stat.label}
                 </p>
 
-                <p
-                  className={`mt-3 font-black ${
-                    connection.status ===
-                    'connected'
-                      ? 'text-emerald-400'
-                      : connection.status ===
-                          'error'
-                        ? 'text-red-400'
-                        : 'text-amber-400'
+                <p className="text-xl font-black text-slate-100 mt-1">
+                  {stat.value}
+                </p>
+              </div>
+            ),
+          )}
+        </section>
+
+        {/* Lessons list */}
+
+        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 md:p-6 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+            <div>
+              <h2 className="font-black">
+                دروس الوحدة
+              </h2>
+
+              <p className="text-xs text-slate-500 mt-1">
+                اختر الدرس لفتح لوحة إدارة مكوناته.
+              </p>
+            </div>
+
+            <span className="text-xs text-slate-500">
+              {lessons.length} درس
+            </span>
+          </div>
+
+          {lessons.length === 0 ? (
+            renderEmpty(
+              "لا توجد دروس في الوحدة المحددة.",
+            )
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {lessons.map(
+                (lesson) => {
+                  const active =
+                    selectedLessonId ===
+                    lesson.id;
+
+                  return (
+                    <button
+                      key={lesson.id}
+                      type="button"
+                      onClick={() =>
+                        openLesson(lesson)
+                      }
+                      className={`text-right rounded-2xl border p-5 transition ${
+                        active
+                          ? "border-amber-500/60 bg-amber-500/10"
+                          : "border-slate-800 bg-slate-950 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 shrink-0 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black">
+                          {
+                            lesson.lesson_number
+                          }
+                        </div>
+
+                        <div className="min-w-0">
+                          <h3 className="font-black text-sm">
+                            {lesson.title}
+                          </h3>
+
+                          {lesson.content_summary && (
+                            <p className="text-xs text-slate-500 mt-2 leading-6 line-clamp-2">
+                              {
+                                lesson.content_summary
+                              }
+                            </p>
+                          )}
+
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {lesson.video_url && (
+                              <span className="text-[9px] text-blue-400">
+                                VIDEO
+                              </span>
+                            )}
+
+                            {lesson.infographic_url && (
+                              <span className="text-[9px] text-purple-400">
+                                INFOGRAPHIC
+                              </span>
+                            )}
+
+                            {lesson.game_url && (
+                              <span className="text-[9px] text-emerald-400">
+                                GAME
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                },
+              )}
+            </div>
+          )}
+        </section>
+
+        {/* Lesson content */}
+
+        {selectedLesson && (
+          <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 md:p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-xl font-black">
+                  {selectedLesson.title}
+                </h2>
+
+                <p className="text-xs text-slate-500 mt-1">
+                  إدارة مكونات المحتوى
+                </p>
+              </div>
+
+              {lessonLoading && (
+                <span className="text-xs text-amber-400 animate-pulse">
+                  جاري تحميل مكونات الدرس...
+                </span>
+              )}
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-3 mb-6 border-b border-slate-800">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() =>
+                    setActiveTab(tab.id)
+                  }
+                  className={`shrink-0 rounded-xl px-4 py-2 text-xs font-black transition ${
+                    activeTab === tab.id
+                      ? "bg-amber-500 text-slate-950"
+                      : "bg-slate-950 text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  {connection.status ===
-                  'connected'
-                    ? 'Online'
-                    : connection.status ===
-                        'error'
-                      ? 'Error'
-                      : 'Checking'}
-                </p>
-              </div>
+                  {tab.label}
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-                <div className="text-2xl">
-                  🗄️
-                </div>
-
-                <h3 className="mt-4 font-black">
-                  Supabase
-                </h3>
-
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  يتم التحقق منه حاليًا عبر
-                  Backend health/API connection.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-                <div className="text-2xl">
-                  📈
-                </div>
-
-                <h3 className="mt-4 font-black">
-                  Performance Monitoring
-                </h3>
-
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  CPU وRAM وLatency وError Rate
-                  وغيرها تُفعّل في مرحلة
-                  deployment على VPS/Cloud.
-                </p>
-              </div>
+                  {tab.count !==
+                    undefined && (
+                    <span className="mr-2 opacity-70">
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-              <h3 className="text-xl font-black">
-                حدود المرحلة الحالية
-              </h3>
-
-              <ul className="mt-4 space-y-3 text-sm leading-7 text-slate-400">
-                <li>
-                  ✓ اختبار Backend Health متاح.
-                </li>
-
-                <li>
-                  ✓ اتصال الـBackend بقاعدة البيانات
-                  يتم من خلال FastAPI.
-                </li>
-
-                <li>
-                  ✓ لا يتم كشف service-role key
-                  للـFrontend.
-                </li>
-
-                <li>
-                  ⏳ مؤشرات أداء السيرفر التفصيلية
-                  تُضاف مع بيئة الـdeployment.
-                </li>
-              </ul>
-            </div>
+            {renderActiveTab()}
           </section>
         )}
 
-        <footer className="mt-10 border-t border-slate-800 pt-5 text-center text-xs text-slate-600">
-          The Tutor — Super Admin Control Center
-        </footer>
+        {/* Current architecture notice */}
+
+        <section className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
+          <p className="text-xs font-black text-blue-400">
+            ملاحظة هندسية
+          </p>
+
+          <p className="text-xs text-slate-400 mt-2 leading-7">
+            هذه الشاشة تستخدم الـAPI الحالي لعرض وإدارة
+            بنية المحتوى دون الاتصال المباشر بقاعدة البيانات
+            من الـFrontend. عمليات الإنشاء والتعديل والحذف
+            ستُضاف بعد تجهيز Admin CRUD API في الـBackend،
+            حتى لا نضع endpoints وهمية أو نعيد استخدام جداول
+            الـlegacy.
+          </p>
+        </section>
+
       </div>
     </main>
   );
