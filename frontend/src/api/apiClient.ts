@@ -10,17 +10,12 @@ async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const headers = new Headers(
-    options.headers,
-  );
+  const headers = new Headers(options.headers);
 
   headers.set("Accept", "application/json");
 
   if (options.body) {
-    headers.set(
-      "Content-Type",
-      "application/json",
-    );
+    headers.set("Content-Type", "application/json");
   }
 
   if (options.token) {
@@ -62,9 +57,18 @@ async function request<T>(
   return response.json() as Promise<T>;
 }
 
-
 export const apiClient = {
+  // ------------------------------------------------------------
+  // Health
+  // ------------------------------------------------------------
+
+  health() {
+    return request("/health");
+  },
+
+  // ------------------------------------------------------------
   // Curriculum
+  // ------------------------------------------------------------
 
   getGrades() {
     return request("/grades");
@@ -79,6 +83,12 @@ export const apiClient = {
   getSubjects(termId: number) {
     return request(
       `/terms/${termId}/subjects`,
+    );
+  },
+
+  getSubject(subjectId: number) {
+    return request(
+      `/subjects/${subjectId}`,
     );
   },
 
@@ -124,7 +134,9 @@ export const apiClient = {
     );
   },
 
+  // ------------------------------------------------------------
   // Student
+  // ------------------------------------------------------------
 
   getStudent(
     studentProfileId: string,
@@ -156,7 +168,9 @@ export const apiClient = {
     );
   },
 
+  // ------------------------------------------------------------
   // Parent
+  // ------------------------------------------------------------
 
   createParentInvitation(
     studentProfileId: string,
@@ -185,10 +199,6 @@ export const apiClient = {
       },
     );
   },
-
-  // Health
-
-  health() {
-    return request("/health");
-  },
 };
+
+export default apiClient;
