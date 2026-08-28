@@ -52,6 +52,11 @@ async function request<T>(
         typeof error?.detail === "string"
       ) {
         message = error.detail;
+      } else if (
+        error?.detail?.message &&
+        typeof error.detail.message === "string"
+      ) {
+        message = error.detail.message;
       }
     } catch {
       // Keep the default error message.
@@ -68,6 +73,14 @@ async function request<T>(
 }
 
 export const apiClient = {
+  // --------------------------------------------------
+  // Health
+  // --------------------------------------------------
+
+  health() {
+    return request("/health");
+  },
+
   // --------------------------------------------------
   // Curriculum
   // --------------------------------------------------
@@ -140,7 +153,9 @@ export const apiClient = {
 
   getQuestion(questionId: string) {
     return request(
-      `/questions/${questionId}`,
+      `/questions/${encodeURIComponent(
+        questionId,
+      )}`,
     );
   },
 
@@ -153,7 +168,9 @@ export const apiClient = {
     token: string,
   ) {
     return request(
-      `/students/${studentProfileId}`,
+      `/students/${encodeURIComponent(
+        studentProfileId,
+      )}`,
       {
         token,
       },
@@ -165,7 +182,9 @@ export const apiClient = {
     token: string,
   ) {
     return request(
-      `/students/${studentProfileId}/progress`,
+      `/students/${encodeURIComponent(
+        studentProfileId,
+      )}/progress`,
       {
         token,
       },
@@ -177,7 +196,9 @@ export const apiClient = {
     token: string,
   ) {
     return request(
-      `/students/${studentProfileId}/analytics`,
+      `/students/${encodeURIComponent(
+        studentProfileId,
+      )}/analytics`,
       {
         token,
       },
@@ -208,19 +229,13 @@ export const apiClient = {
     token: string,
   ) {
     return request(
-      `/parent/invitations/${encodeURIComponent(code)}/claim`,
+      `/parent/invitations/${encodeURIComponent(
+        code,
+      )}/claim`,
       {
         method: "POST",
         token,
       },
     );
-  },
-
-  // --------------------------------------------------
-  // Health
-  // --------------------------------------------------
-
-  health() {
-    return request("/health");
   },
 };
