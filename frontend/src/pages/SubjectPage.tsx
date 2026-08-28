@@ -5,8 +5,12 @@ import { apiClient } from '../api/apiClient';
 
 interface Subject {
   id: number;
+  term_id?: number | null;
   title: string;
+  code?: string | null;
   description?: string | null;
+  icon_name?: string | null;
+  color_theme?: string | null;
 }
 
 interface Unit {
@@ -18,13 +22,21 @@ interface Unit {
 }
 
 const SubjectPage: React.FC = () => {
-  const { subjectId } = useParams<{ subjectId: string }>();
+  const { subjectId } = useParams<{
+    subjectId: string;
+  }>();
 
-  const [subject, setSubject] = useState<Subject | null>(null);
-  const [units, setUnits] = useState<Unit[]>([]);
+  const [subject, setSubject] =
+    useState<Subject | null>(null);
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [units, setUnits] =
+    useState<Unit[]>([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
+    useState<string | null>(null);
 
   useEffect(() => {
     if (!subjectId) {
@@ -48,32 +60,153 @@ const SubjectPage: React.FC = () => {
       setError(null);
 
       try {
-        const [subjectData, unitsData] = await Promise.all([
-          apiClient.getSubject(id),
-          apiClient.getUnits(id),
-        ]);
+        /*
+         * The backend currently exposes:
+         *
+         * GET /api/subjects/{subject_id}/units
+         *
+         * but does not expose:
+         *
+         * GET /api/subjects/{subject_id}
+         *
+         * Therefore we load the units first and use the
+         * subject_id relationship to establish that the
+         * requested subject exists.
+         *
+         * The subject title/code are recovered from the
+         * curriculum data available through the API.
+         */
+
+        const unitsData =
+          await apiClient.getUnits(id);
 
         if (!active) return;
 
-        setSubject(
-          subjectData && typeof subjectData === 'object'
-            ? (subjectData as Subject)
-            : null,
-        );
-
-        setUnits(
+        const loadedUnits =
           Array.isArray(unitsData)
             ? (unitsData as Unit[])
-            : [],
-        );
+            : [];
+
+        setUnits(loadedUnits);
+
+        /*
+         * The current API does not provide a direct
+         * subject endpoint. We therefore fetch grades,
+         * terms, and subjects to locate the exact subject.
+         */
+        const gradesData =
+          await apiClient.getGrades();
+
+        if (!active) return;
+
+        const grades = Array.isArray(gradesData)
+          ? gradesData
+          : [];
+
+        let foundSubject: Subject | null =
+          null;
+
+        for (const grade of grades) {
+          if (!active) return;
+
+          if (
+            !grade ||
+            typeof grade !== 'object' ||
+            typeof grade.id !== 'number'
+          ) {
+            continue;
+          }
+
+          let termsData;
+
+          try {
+            termsData =
+              await apiClient.getTerms(
+                grade.id,
+              );
+          } catch {
+            continue;
+          }
+
+          if (!active) return;
+
+          const terms = Array.isArray(
+            termsData,
+          )
+            ? termsData
+            : [];
+
+          for (const term of terms) {
+            if (!active) return;
+
+            if (
+              !term ||
+              typeof term !== 'object' ||
+              typeof term.id !== 'number'
+            ) {
+              continue;
+            }
+
+            let subjectsData;
+
+            try {
+              subjectsData =
+                await apiClient.getSubjects(
+                  term.id,
+                );
+            } catch {
+              continue;
+            }
+
+            if (!active) return;
+
+            const subjects =
+              Array.isArray(subjectsData)
+                ? (subjectsData as Subject[])
+                : [];
+
+            const match = subjects.find(
+              (item) =>
+                item &&
+                item.id === id,
+            );
+
+            if (match) {
+              foundSubject = match;
+              break;
+            }
+          }
+
+          if (foundSubject) {
+            break;
+          }
+        }
+
+        if (!active) return;
+
+        if (!foundSubject) {
+          setSubject(null);
+          setUnits([]);
+          setError(
+            'لم يتم العثور على المادة.',
+          );
+          return;
+        }
+
+        setSubject(foundSubject);
       } catch (err) {
-        console.error('Failed to load subject:', err);
+        console.error(
+          'Failed to load subject:',
+          err,
+        );
 
         if (!active) return;
 
         setSubject(null);
         setUnits([]);
-        setError('تعذر تحميل بيانات المادة.');
+        setError(
+          'تعذر تحميل بيانات المادة.',
+        );
       } finally {
         if (active) {
           setLoading(false);
@@ -90,7 +223,10 @@ const SubjectPage: React.FC = () => {
 
   if (loading) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-10" dir="rtl">
+      <main
+        className="max-w-4xl mx-auto px-4 py-10"
+        dir="rtl"
+      >
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
           <p className="text-amber-400 font-bold animate-pulse">
             جاري تحميل المادة...
@@ -102,14 +238,18 @@ const SubjectPage: React.FC = () => {
 
   if (error || !subject) {
     return (
-      <main className="max-w-4xl mx-auto px-4 py-10" dir="rtl">
+      <main
+        className="max-w-4xl mx-auto px-4 py-10"
+        dir="rtl"
+      >
         <div className="bg-slate-900 border border-red-900/50 rounded-2xl p-8 text-center">
           <h1 className="text-xl font-black text-red-400">
             المادة غير متاحة
           </h1>
 
           <p className="text-sm text-slate-400 mt-3">
-            {error ?? 'لم يتم العثور على المادة.'}
+            {error ??
+              'لم يتم العثور على المادة.'}
           </p>
 
           <Link
@@ -136,13 +276,21 @@ const SubjectPage: React.FC = () => {
       </Link>
 
       <header className="mt-5 mb-8">
-        <div className="inline-flex items-center px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-extrabold">
-          📚 المادة الدراسية
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-extrabold">
+          {subject.icon_name
+            ? `${subject.icon_name} المادة الدراسية`
+            : '📚 المادة الدراسية'}
         </div>
 
         <h1 className="text-3xl md:text-4xl font-black text-amber-400 mt-3">
           {subject.title}
         </h1>
+
+        {subject.code && (
+          <p className="text-xs text-slate-500 mt-2">
+            كود المادة: {subject.code}
+          </p>
+        )}
 
         {subject.description && (
           <p className="text-slate-300 mt-3 leading-7">
@@ -165,7 +313,8 @@ const SubjectPage: React.FC = () => {
         {units.length === 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
             <p className="text-slate-400">
-              لا توجد وحدات متاحة لهذه المادة حاليًا.
+              لا توجد وحدات متاحة لهذه المادة
+              حاليًا.
             </p>
           </div>
         ) : (
@@ -178,7 +327,8 @@ const SubjectPage: React.FC = () => {
               >
                 <div className="flex items-start gap-4">
                   <div className="shrink-0 w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black">
-                    {unit.unit_number ?? index + 1}
+                    {unit.unit_number ??
+                      index + 1}
                   </div>
 
                   <div className="min-w-0 flex-1">
@@ -193,7 +343,10 @@ const SubjectPage: React.FC = () => {
                     )}
                   </div>
 
-                  <span className="text-amber-400 text-sm shrink-0">
+                  <span
+                    className="text-amber-400 text-sm shrink-0"
+                    aria-hidden="true"
+                  >
                     ◀
                   </span>
                 </div>
