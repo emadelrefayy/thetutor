@@ -14,15 +14,16 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 
-# ==================================================================
+# =====================================================================
 # Environment
-# ==================================================================
+# =====================================================================
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv(
     "SUPABASE_SERVICE_ROLE_KEY"
 )
+
 FRONTEND_ORIGIN = os.getenv(
     "FRONTEND_ORIGIN",
     "http://localhost:5173",
@@ -52,13 +53,13 @@ SUPABASE_AUTH_URL = (
 )
 
 
-# ==================================================================
+# =====================================================================
 # Application
-# ==================================================================
+# =====================================================================
 
 app = FastAPI(
     title="The Tutor API",
-    version="1.1.0",
+    version="2.0.0",
 )
 
 
@@ -78,9 +79,15 @@ app.add_middleware(
 )
 
 
-# ==================================================================
+# =====================================================================
 # Helpers
-# ==================================================================
+# =====================================================================
+
+def now_iso() -> str:
+    return datetime.now(
+        timezone.utc
+    ).isoformat()
+
 
 def require_bearer(
     authorization: str | None,
@@ -165,7 +172,6 @@ async def supabase_request(
         bearer = f"Bearer {key}"
     else:
         key = SUPABASE_KEY
-
         bearer = (
             authorization
             if authorization
@@ -178,7 +184,11 @@ async def supabase_request(
         "Content-Type": "application/json",
     }
 
-    if method in {"POST", "PATCH", "PUT"}:
+    if method.upper() in {
+        "POST",
+        "PATCH",
+        "PUT",
+    }:
         headers["Prefer"] = (
             "return=representation"
         )
@@ -187,7 +197,7 @@ async def supabase_request(
         timeout=30.0
     ) as client:
         response = await client.request(
-            method,
+            method.upper(),
             f"{SUPABASE_REST_URL}/{table}",
             headers=headers,
             params=params,
@@ -198,7 +208,9 @@ async def supabase_request(
         raise HTTPException(
             status_code=502,
             detail={
-                "message": "Supabase request failed.",
+                "message": (
+                    "Supabase request failed."
+                ),
                 "status": response.status_code,
                 "response": response.text,
             },
@@ -213,10 +225,38 @@ async def supabase_request(
         return []
 
 
-def now_iso() -> str:
-    return datetime.now(
-        timezone.utc
-    ).isoformat()
+async def verify_student_access(
+    student_profile_id: str,
+    authorization: str | None,
+):
+    auth, user = await require_user(
+        authorization
+    )
+
+    if user.get("id") != student_profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied.",
+        )
+
+    return auth, user
+
+
+async def verify_parent_access(
+    parent_profile_id: str,
+    authorization: str | None,
+):
+    auth, user = await require_user(
+        authorization
+    )
+
+    if user.get("id") != parent_profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied.",
+        )
+
+    return auth, user
 
 
 def generate_invitation_code() -> str:
@@ -234,9 +274,9 @@ def generate_invitation_code() -> str:
     )
 
 
-# ==================================================================
+# =====================================================================
 # Request models
-# ==================================================================
+# =====================================================================
 
 class ProgressUpdate(BaseModel):
     status: str = Field(
@@ -258,23 +298,6 @@ class LearningEventCreate(BaseModel):
     lesson_id: int | None = None
     concept_id: int | None = None
     metadata: dict[str, Any] = Field(
-        default_factory=dict
-    )
-
-
-class QuestionAttemptCreate(BaseModel):
-    session_question_id: str
-    answer: Any
-    is_correct: bool
-    points_awarded: int = Field(
-        default=0,
-        ge=0,
-    )
-    response_time_ms: int | None = Field(
-        default=None,
-        ge=0,
-    )
-    feedback: dict[str, Any] = Field(
         default_factory=dict
     )
 
@@ -307,16 +330,33 @@ class GameSessionUpdate(BaseModel):
     )
 
 
-# ==================================================================
+class QuestionAttemptCreate(BaseModel):
+    session_question_id: str
+    answer: Any
+    is_correct: bool
+    points_awarded: int = Field(
+        default=0,
+        ge=0,
+    )
+    response_time_ms: int | None = Field(
+        default=None,
+        ge=0,
+    )
+    feedback: dict[str, Any] = Field(
+        default_factory=dict
+    )
+
+
+# =====================================================================
 # Health
-# ==================================================================
+# =====================================================================
 
 @app.get("/")
 async def root():
     return {
         "service": "The Tutor API",
         "status": "online",
-        "version": "1.1.0",
+        "version": "2.0.0",
     }
 
 
@@ -325,12 +365,13 @@ async def health():
     return {
         "service": "The Tutor API",
         "status": "healthy",
+        "version": "2.0.0",
     }
 
 
-# ==================================================================
+# =====================================================================
 # Curriculum
-# ==================================================================
+# =====================================================================
 
 @app.get("/api/grades")
 async def get_grades():
@@ -390,9 +431,9 @@ async def get_grade_terms(
             "grade_id": f"eq.{grade_id}",
             "select": (
                 "id,"
+                "grade_id,"
                 "title,"
                 "code,"
-                "grade_id,"
                 "created_at"
             ),
             "order": "id.asc",
@@ -411,9 +452,9 @@ async def get_term(
             "id": f"eq.{term_id}",
             "select": (
                 "id,"
+                "grade_id,"
                 "title,"
                 "code,"
-                "grade_id,"
                 "created_at"
             ),
             "limit": "1",
@@ -483,7 +524,9 @@ async def get_subject(
     return rows[0]
 
 
-@app.get("/api/subjects/{subject_id}/units")
+@app.get(
+    "/api/subjects/{subject_id}/units"
+)
 async def get_subject_units(
     subject_id: int,
 ):
@@ -535,7 +578,9 @@ async def get_unit(
     return rows[0]
 
 
-@app.get("/api/units/{unit_id}/lessons")
+@app.get(
+    "/api/units/{unit_id}/lessons"
+)
 async def get_unit_lessons(
     unit_id: int,
 ):
@@ -562,9 +607,9 @@ async def get_unit_lessons(
     )
 
 
-# ==================================================================
+# =====================================================================
 # Lessons
-# ==================================================================
+# =====================================================================
 
 @app.get("/api/lessons/{lesson_id}")
 async def get_lesson(
@@ -729,7 +774,7 @@ async def get_lesson_concepts(
     result = []
 
     for link in links:
-        concepts = await supabase_request(
+        rows = await supabase_request(
             "GET",
             "concepts",
             params={
@@ -747,10 +792,13 @@ async def get_lesson_concepts(
             },
         )
 
-        if concepts:
-            concept = concepts[0]
+        if rows:
+            concept = rows[0]
             concept["is_primary"] = (
-                link.get("is_primary", False)
+                link.get(
+                    "is_primary",
+                    False,
+                )
             )
             result.append(concept)
 
@@ -780,7 +828,7 @@ async def get_lesson_sources(
     result = []
 
     for link in links:
-        sources = await supabase_request(
+        rows = await supabase_request(
             "GET",
             "curriculum_sources",
             params={
@@ -804,8 +852,8 @@ async def get_lesson_sources(
             },
         )
 
-        if sources:
-            source = sources[0]
+        if rows:
+            source = rows[0]
             source["locator"] = (
                 link.get("locator")
             )
@@ -817,9 +865,9 @@ async def get_lesson_sources(
     return result
 
 
-# ==================================================================
+# =====================================================================
 # Questions
-# ==================================================================
+# =====================================================================
 
 @app.get(
     "/api/lessons/{lesson_id}/questions"
@@ -843,7 +891,9 @@ async def get_lesson_questions(
     result = []
 
     for link in links:
-        question_id = link["question_id"]
+        question_id = link[
+            "question_id"
+        ]
 
         questions = await supabase_request(
             "GET",
@@ -958,26 +1008,9 @@ async def get_question(
     return questions[0]
 
 
-# ==================================================================
+# =====================================================================
 # Student
-# ==================================================================
-
-async def verify_student_access(
-    student_profile_id: str,
-    authorization: str | None,
-):
-    auth, user = await require_user(
-        authorization
-    )
-
-    if user.get("id") != student_profile_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Access denied.",
-        )
-
-    return auth, user
-
+# =====================================================================
 
 @app.get(
     "/api/students/{student_profile_id}"
@@ -1171,6 +1204,23 @@ async def update_lesson_progress(
         authorization,
     )
 
+    lesson = await supabase_request(
+        "GET",
+        "lessons",
+        params={
+            "id": f"eq.{lesson_id}",
+            "select": "id",
+            "limit": "1",
+        },
+        authorization=auth,
+    )
+
+    if not lesson:
+        raise HTTPException(
+            status_code=404,
+            detail="Lesson not found.",
+        )
+
     existing = await supabase_request(
         "GET",
         "lesson_progress",
@@ -1179,7 +1229,7 @@ async def update_lesson_progress(
                 f"eq.{student_profile_id}"
             ),
             "lesson_id": f"eq.{lesson_id}",
-            "select": "id",
+            "select": "id,first_started_at",
             "limit": "1",
         },
         authorization=auth,
@@ -1207,15 +1257,16 @@ async def update_lesson_progress(
     ):
         payload["status"] = "completed"
         payload["completion_percent"] = 100
+        payload["completed_at"] = now_iso()
 
-        if not existing:
+    if existing:
+        if not existing[0].get(
+            "first_started_at"
+        ):
             payload["first_started_at"] = (
                 now_iso()
             )
 
-        payload["completed_at"] = now_iso()
-
-    if existing:
         rows = await supabase_request(
             "PATCH",
             "lesson_progress",
@@ -1303,10 +1354,6 @@ async def get_student_analytics(
     }
 
 
-# ==================================================================
-# Learning Events
-# ==================================================================
-
 @app.post(
     "/api/students/{student_profile_id}/events"
 )
@@ -1341,9 +1388,9 @@ async def create_learning_event(
     return rows[0] if rows else {}
 
 
-# ==================================================================
-# XP / Gamification
-# ==================================================================
+# =====================================================================
+# Gamification
+# =====================================================================
 
 @app.get(
     "/api/students/{student_profile_id}/streak"
@@ -1456,7 +1503,7 @@ async def get_student_achievements(
         authorization=auth,
     )
 
-    achievements = []
+    result = []
 
     for item in earned:
         achievement_id = item.get(
@@ -1477,8 +1524,10 @@ async def get_student_achievements(
                     "name,"
                     "description,"
                     "icon_url,"
+                    "criteria,"
                     "xp_reward,"
-                    "criteria"
+                    "is_active,"
+                    "created_at"
                 ),
                 "limit": "1",
             },
@@ -1493,14 +1542,14 @@ async def get_student_achievements(
             achievement["metadata"] = (
                 item.get("metadata")
             )
-            achievements.append(achievement)
+            result.append(achievement)
 
-    return achievements
+    return result
 
 
-# ==================================================================
+# =====================================================================
 # Games
-# ==================================================================
+# =====================================================================
 
 @app.get("/api/games")
 async def get_games(
@@ -1532,7 +1581,9 @@ async def get_games(
     )
 
 
-@app.get("/api/lessons/{lesson_id}/games")
+@app.get(
+    "/api/lessons/{lesson_id}/games"
+)
 async def get_lesson_games(
     lesson_id: int,
 ):
@@ -1593,6 +1644,9 @@ async def get_game_definitions(
     course_id: str | None = Query(
         default=None
     ),
+    challenge_id: str | None = Query(
+        default=None
+    ),
 ):
     params = {
         "is_active": "eq.true",
@@ -1633,6 +1687,11 @@ async def get_game_definitions(
             f"eq.{course_id}"
         )
 
+    if challenge_id is not None:
+        params["challenge_id"] = (
+            f"eq.{challenge_id}"
+        )
+
     return await supabase_request(
         "GET",
         "game_definitions",
@@ -1667,6 +1726,28 @@ async def get_game_definition(
 
     definition = rows[0]
 
+    template = await supabase_request(
+        "GET",
+        "game_templates",
+        params={
+            "id": (
+                f"eq.{definition['template_id']}"
+            ),
+            "select": (
+                "id,"
+                "code,"
+                "name,"
+                "description,"
+                "game_type,"
+                "supported_question_types,"
+                "configuration,"
+                "frontend_url,"
+                "thumbnail_url"
+            ),
+            "limit": "1",
+        },
+    )
+
     questions = await supabase_request(
         "GET",
         "game_definition_questions",
@@ -1682,6 +1763,12 @@ async def get_game_definition(
             ),
             "order": "sort_order.asc",
         },
+    )
+
+    definition["template"] = (
+        template[0]
+        if template
+        else None
     )
 
     definition["questions"] = questions
@@ -1738,6 +1825,7 @@ async def create_game_session(
             "status": "started",
             "score": 0,
             "max_score": 0,
+            "accuracy": None,
             "xp_earned": 0,
             "metadata": {},
         },
@@ -1745,7 +1833,10 @@ async def create_game_session(
     )
 
     if not session_rows:
-        return {}
+        raise HTTPException(
+            status_code=502,
+            detail="Could not create game session.",
+        )
 
     session = session_rows[0]
 
@@ -1754,7 +1845,7 @@ async def create_game_session(
         "game_definition_questions",
         params={
             "game_definition_id": (
-                data.game_definition_id
+                f"eq.{data.game_definition_id}"
             ),
             "select": (
                 "question_id,"
@@ -1788,13 +1879,40 @@ async def create_game_session(
     return session
 
 
-@app.patch(
+@app.get(
+    "/api/students/{student_profile_id}/game-sessions"
+)
+async def get_student_game_sessions(
+    student_profile_id: str,
+    authorization: str | None = Header(
+        default=None
+    ),
+):
+    auth, _ = await verify_student_access(
+        student_profile_id,
+        authorization,
+    )
+
+    return await supabase_request(
+        "GET",
+        "game_sessions",
+        params={
+            "student_profile_id": (
+                f"eq.{student_profile_id}"
+            ),
+            "select": "*",
+            "order": "started_at.desc",
+        },
+        authorization=auth,
+    )
+
+
+@app.get(
     "/api/students/{student_profile_id}/game-sessions/{session_id}"
 )
-async def update_game_session(
+async def get_game_session(
     student_profile_id: str,
     session_id: str,
-    data: GameSessionUpdate,
     authorization: str | None = Header(
         default=None
     ),
@@ -1812,13 +1930,73 @@ async def update_game_session(
             "student_profile_id": (
                 f"eq.{student_profile_id}"
             ),
-            "select": "id",
+            "select": "*",
             "limit": "1",
         },
         authorization=auth,
     )
 
     if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail="Game session not found.",
+        )
+
+    session = rows[0]
+
+    session["questions"] = await supabase_request(
+        "GET",
+        "game_session_questions",
+        params={
+            "session_id": (
+                f"eq.{session_id}"
+            ),
+            "select": (
+                "id,"
+                "session_id,"
+                "question_id,"
+                "sequence_no,"
+                "points_possible"
+            ),
+            "order": "sequence_no.asc",
+        },
+        authorization=auth,
+    )
+
+    return session
+
+
+@app.patch(
+    "/api/students/{student_profile_id}/game-sessions/{session_id}"
+)
+async def update_game_session(
+    student_profile_id: str,
+    session_id: str,
+    data: GameSessionUpdate,
+    authorization: str | None = Header(
+        default=None
+    ),
+):
+    auth, _ = await verify_student_access(
+        student_profile_id,
+        authorization,
+    )
+
+    existing = await supabase_request(
+        "GET",
+        "game_sessions",
+        params={
+            "id": f"eq.{session_id}",
+            "student_profile_id": (
+                f"eq.{student_profile_id}"
+            ),
+            "select": "id",
+            "limit": "1",
+        },
+        authorization=auth,
+    )
+
+    if not existing:
         raise HTTPException(
             status_code=404,
             detail="Game session not found.",
@@ -1833,10 +2011,7 @@ async def update_game_session(
         "metadata": data.metadata,
     }
 
-    if data.status in {
-        "completed",
-        "finished",
-    }:
+    if data.status == "completed":
         payload["completed_at"] = now_iso()
 
     updated = await supabase_request(
@@ -1852,7 +2027,11 @@ async def update_game_session(
         authorization=auth,
     )
 
-    return updated[0] if updated else payload
+    return (
+        updated[0]
+        if updated
+        else payload
+    )
 
 
 @app.post(
@@ -1880,6 +2059,7 @@ async def create_question_attempt(
             "select": (
                 "id,"
                 "session_id,"
+                "question_id,"
                 "points_possible"
             ),
             "limit": "1",
@@ -1919,6 +2099,18 @@ async def create_question_attempt(
             detail="Access denied.",
         )
 
+    if (
+        data.points_awarded
+        > session_question["points_possible"]
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "points_awarded cannot exceed "
+                "points_possible."
+            ),
+        )
+
     rows = await supabase_request(
         "POST",
         "question_attempts",
@@ -1946,9 +2138,9 @@ async def create_question_attempt(
     return rows[0] if rows else {}
 
 
-# ==================================================================
+# =====================================================================
 # Challenges
-# ==================================================================
+# =====================================================================
 
 @app.get("/api/challenges")
 async def get_challenges(
@@ -2007,24 +2199,24 @@ async def get_challenge(
 
     challenge = rows[0]
 
-    questions = await supabase_request(
-        "GET",
-        "challenge_questions",
-        params={
-            "challenge_id": (
-                f"eq.{challenge_id}"
-            ),
-            "select": (
-                "challenge_id,"
-                "question_id,"
-                "sort_order,"
-                "points"
-            ),
-            "order": "sort_order.asc",
-        },
+    challenge["questions"] = (
+        await supabase_request(
+            "GET",
+            "challenge_questions",
+            params={
+                "challenge_id": (
+                    f"eq.{challenge_id}"
+                ),
+                "select": (
+                    "challenge_id,"
+                    "question_id,"
+                    "sort_order,"
+                    "points"
+                ),
+                "order": "sort_order.asc",
+            },
+        )
     )
-
-    challenge["questions"] = questions
 
     return challenge
 
@@ -2102,9 +2294,9 @@ async def join_challenge(
     return rows[0] if rows else {}
 
 
-# ==================================================================
+# =====================================================================
 # Parent
-# ==================================================================
+# =====================================================================
 
 @app.post(
     "/api/parent/invitations"
@@ -2115,11 +2307,10 @@ async def create_parent_invitation(
         default=None
     ),
 ):
-    auth, user = await require_user(
-        authorization
+    auth, _ = await verify_student_access(
+        student_profile_id,
+        authorization,
     )
-
-    created_by = user.get("id")
 
     student = await supabase_request(
         "GET",
@@ -2149,7 +2340,7 @@ async def create_parent_invitation(
             "student_profile_id": (
                 student_profile_id
             ),
-            "created_by": created_by,
+            "created_by": student_profile_id,
             "code": code,
         },
         authorization=auth,
@@ -2171,7 +2362,7 @@ async def claim_parent_invitation(
         authorization
     )
 
-    parent_profile_id = user.get("id")
+    parent_profile_id = user["id"]
 
     invitations = await supabase_request(
         "GET",
@@ -2182,7 +2373,12 @@ async def claim_parent_invitation(
             "select": (
                 "id,"
                 "student_profile_id,"
-                "expires_at"
+                "code,"
+                "created_by,"
+                "expires_at,"
+                "used_at,"
+                "used_by,"
+                "created_at"
             ),
             "limit": "1",
         },
@@ -2232,7 +2428,10 @@ async def claim_parent_invitation(
             ),
             "select": (
                 "parent_profile_id,"
-                "student_profile_id"
+                "student_profile_id,"
+                "relationship,"
+                "is_primary,"
+                "created_at"
             ),
             "limit": "1",
         },
@@ -2288,7 +2487,11 @@ async def claim_parent_invitation(
         "student_profile_id": (
             invitation["student_profile_id"]
         ),
-        "relationship": relationship,
+        "relationship": (
+            relationship[0]
+            if relationship
+            else None
+        ),
     }
 
 
@@ -2301,15 +2504,10 @@ async def get_parent_students(
         default=None
     ),
 ):
-    auth, user = await require_user(
-        authorization
+    auth, _ = await verify_parent_access(
+        parent_profile_id,
+        authorization,
     )
-
-    if user.get("id") != parent_profile_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Access denied.",
-        )
 
     return await supabase_request(
         "GET",
@@ -2334,15 +2532,10 @@ async def get_parent_student(
         default=None
     ),
 ):
-    auth, user = await require_user(
-        authorization
+    auth, _ = await verify_parent_access(
+        parent_profile_id,
+        authorization,
     )
-
-    if user.get("id") != parent_profile_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Access denied.",
-        )
 
     relationship = await supabase_request(
         "GET",
@@ -2369,7 +2562,10 @@ async def get_parent_student(
     if not relationship:
         raise HTTPException(
             status_code=403,
-            detail="Student is not linked to this parent.",
+            detail=(
+                "Student is not linked "
+                "to this parent."
+            ),
         )
 
     dashboard = await supabase_request(
@@ -2399,9 +2595,9 @@ async def get_parent_student(
     )
 
 
-# ==================================================================
+# =====================================================================
 # Courses
-# ==================================================================
+# =====================================================================
 
 @app.get("/api/courses")
 async def get_courses():
@@ -2434,7 +2630,17 @@ async def get_course(
         "courses",
         params={
             "id": f"eq.{course_id}",
-            "select": "*",
+            "select": (
+                "id,"
+                "title,"
+                "subject_code,"
+                "grade_level,"
+                "term,"
+                "description,"
+                "icon,"
+                "is_experimental,"
+                "created_at"
+            ),
             "limit": "1",
         },
     )
@@ -2465,27 +2671,27 @@ async def get_course(
     )
 
     for module in modules:
-        lessons = await supabase_request(
-            "GET",
-            "course_lessons",
-            params={
-                "module_id": (
-                    f"eq.{module['id']}"
-                ),
-                "select": (
-                    "id,"
-                    "module_id,"
-                    "title,"
-                    "description,"
-                    "content,"
-                    "sort_order,"
-                    "created_at"
-                ),
-                "order": "sort_order.asc",
-            },
+        module["lessons"] = (
+            await supabase_request(
+                "GET",
+                "course_lessons",
+                params={
+                    "module_id": (
+                        f"eq.{module['id']}"
+                    ),
+                    "select": (
+                        "id,"
+                        "module_id,"
+                        "title,"
+                        "description,"
+                        "content,"
+                        "sort_order,"
+                        "created_at"
+                    ),
+                    "order": "sort_order.asc",
+                },
+            )
         )
-
-        module["lessons"] = lessons
 
     course["modules"] = modules
 
@@ -2503,7 +2709,14 @@ async def get_course_modules(
         "course_modules",
         params={
             "course_id": f"eq.{course_id}",
-            "select": "*",
+            "select": (
+                "id,"
+                "course_id,"
+                "title,"
+                "description,"
+                "sort_order,"
+                "created_at"
+            ),
             "order": "sort_order.asc",
         },
     )
@@ -2520,7 +2733,15 @@ async def get_course_module_lessons(
         "course_lessons",
         params={
             "module_id": f"eq.{module_id}",
-            "select": "*",
+            "select": (
+                "id,"
+                "module_id,"
+                "title,"
+                "description,"
+                "content,"
+                "sort_order,"
+                "created_at"
+            ),
             "order": "sort_order.asc",
         },
     )
@@ -2558,13 +2779,11 @@ async def get_course_enrollment(
     return rows[0] if rows else None
 
 
-# ==================================================================
-# Parent / student messaging
-# ==================================================================
+# =====================================================================
+# Messaging
+# =====================================================================
 
-@app.get(
-    "/api/conversations"
-)
+@app.get("/api/conversations")
 async def get_conversations(
     student_profile_id: str,
     authorization: str | None = Header(
@@ -2614,9 +2833,11 @@ async def get_conversations(
         )
 
         if conversations:
-            result.append(
-                conversations[0]
+            conversation = conversations[0]
+            conversation["joined_at"] = (
+                membership.get("joined_at")
             )
+            result.append(conversation)
 
     return result
 
