@@ -239,7 +239,7 @@ async def get_grades():
         "GET",
         "grades",
         params={
-            "select": "*",
+            "select": "id,name:title,level_code,code,created_at",
             "order": "id.asc",
         },
     )
@@ -254,7 +254,7 @@ async def get_grade_terms(
         "terms",
         params={
             "grade_id": f"eq.{grade_id}",
-            "select": "*",
+            "select": "id,name:title,code,grade_id,created_at",
             "order": "id.asc",
         },
     )
