@@ -239,7 +239,13 @@ async def get_grades():
         "GET",
         "grades",
         params={
-            "select": "id,name:title,level_code,code,created_at",
+            "select": (
+                "id,"
+                "name:title,"
+                "level_code,"
+                "code,"
+                "created_at"
+            ),
             "order": "id.asc",
         },
     )
@@ -254,7 +260,13 @@ async def get_grade_terms(
         "terms",
         params={
             "grade_id": f"eq.{grade_id}",
-            "select": "id,name:title,code,grade_id,created_at",
+            "select": (
+                "id,"
+                "name:title,"
+                "code,"
+                "grade_id,"
+                "created_at"
+            ),
             "order": "id.asc",
         },
     )
@@ -328,6 +340,10 @@ async def get_lesson(
     return rows[0]
 
 
+# ------------------------------------------------------------------
+# Lesson Content
+# ------------------------------------------------------------------
+
 @app.get(
     "/api/lessons/{lesson_id}/content"
 )
@@ -339,6 +355,7 @@ async def get_lesson_content(
         "lesson_content_blocks",
         params={
             "lesson_id": f"eq.{lesson_id}",
+            "is_published": "eq.true",
             "select": "*",
             "order": "sort_order.asc",
         },
@@ -356,6 +373,7 @@ async def get_lesson_assets(
         "lesson_assets",
         params={
             "lesson_id": f"eq.{lesson_id}",
+            "is_published": "eq.true",
             "select": "*",
             "order": "sort_order.asc",
         },
@@ -392,6 +410,7 @@ async def get_lesson_questions(
             "questions",
             params={
                 "id": f"eq.{question_id}",
+                "status": "eq.published",
                 "select": (
                     "id,"
                     "question_type,"
@@ -453,6 +472,7 @@ async def get_question(
         "questions",
         params={
             "id": f"eq.{question_id}",
+            "status": "eq.published",
             "select": (
                 "id,"
                 "question_type,"
@@ -641,7 +661,7 @@ async def get_student_analytics(
 
 
 # ------------------------------------------------------------------
-# Parent invitations
+# Parent Invitations
 # ------------------------------------------------------------------
 
 def generate_invitation_code():
