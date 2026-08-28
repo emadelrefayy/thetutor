@@ -1,8 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -14,75 +10,89 @@ import {
   type StudentDashboard as StudentDashboardData,
   type StudentProfile,
   type StudentStreak,
-  type StudentSubjectMetric,
   type StudentXp,
   type Subject,
   type Term,
 } from "../api/apiClient";
 
-interface SubjectWithMetric extends Subject {
-  metric?: StudentSubjectMetric;
+import { supabase } from "../lib/supabase";
+
+interface SubjectCard extends Subject {
+  lessons_total: number;
+  lessons_completed: number;
+  questions_answered: number;
+  questions_correct: number;
+  accuracy: number;
+  mastery_score: number;
+  xp_earned: number;
 }
 
-interface DashboardState {
+interface DashboardData {
   profile: StudentProfile | null;
+  grade: Grade | null;
   dashboard: StudentDashboardData | null;
   analytics: StudentAnalytics | null;
   streak: StudentStreak | null;
   xp: StudentXp | null;
   achievements: Achievement[];
-  progressCount: number;
-  grade: Grade | null;
-  subjects: SubjectWithMetric[];
+  subjects: SubjectCard[];
+  terms: Term[];
 }
 
-const EMPTY_STATE: DashboardState = {
+const EMPTY_DATA: DashboardData = {
   profile: null,
+  grade: null,
   dashboard: null,
   analytics: null,
   streak: null,
   xp: null,
   achievements: [],
-  progressCount: 0,
-  grade: null,
   subjects: [],
+  terms: [],
 };
 
-function getStudentProfileId(): string | null {
-  const keys = [
-    "student_profile_id",
-    "studentProfileId",
-    "profile_id",
-    "student_id",
-  ];
+function numberValue(
+  value: unknown,
+  fallback = 0,
+): number {
+  const parsed = Number(value);
 
-  for (const key of keys) {
-    const value = localStorage.getItem(key);
-
-    if (value?.trim()) {
-      return value.trim();
-    }
-  }
-
-  return null;
+  return Number.isFinite(parsed)
+    ? parsed
+    : fallback;
 }
 
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("ar-EG").format(
-    Math.max(0, Number(value) || 0),
-  );
-}
-
-function formatPercent(value: number): string {
-  const safeValue = Math.min(
+function percentValue(
+  value: unknown,
+): number {
+  return Math.min(
     100,
-    Math.max(0, Number(value) || 0),
+    Math.max(
+      0,
+      numberValue(value),
+    ),
   );
-
-  return `${Math.round(safeValue)}%`;
 }
 
-function formatDate(value?: string | null): string {
+function formatNumber(
+  value: unknown,
+): string {
+  return new Intl.NumberFormat("ar-EG").format(
+    numberValue(value),
+  );
+}
+
+function formatPercent(
+  value: unknown,
+): string {
+  return `${Math.round(
+    percentValue(value),
+  )}%`;
+}
+
+function formatDate(
+  value?: string | null,
+): string {
   if (!value) {
     return "—";
   }
@@ -93,132 +103,86 @@ function formatDate(value?: string | null): string {
     return "—";
   }
 
-  return new Intl.DateTimeFormat("ar-EG", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
+  return new Intl.DateTimeFormat(
+    "ar-EG",
+    {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    },
+  ).format(date);
 }
 
-function getRecommendationIcon(
+function recommendationIcon(
   type: string,
 ): string {
   switch (type) {
     case "lesson":
       return "📘";
+
     case "concept":
       return "🧠";
+
     case "practice":
       return "✏️";
+
     case "vocabulary":
       return "📚";
+
     case "game":
       return "🎮";
+
     case "course":
       return "🎓";
+
     default:
       return "⭐";
   }
 }
 
-function getMetricLabel(
-  metric?: StudentSubjectMetric,
-): string {
-  if (!metric) {
-    return "لم يبدأ بعد";
-  }
-
-  if (metric.lessons_completed > 0) {
-    return `${formatNumber(
-      metric.lessons_completed,
-    )} درس مكتمل`;
-  }
-
-  return "لم يبدأ بعد";
+function getSummaryNumber(
+  summary: Record<string, unknown> | null | undefined,
+  key: string,
+): number {
+  return numberValue(
+    summary?.[key],
+  );
 }
 
 const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
 
-  const [studentProfileId, setStudentProfileId] =
+  const [data, setData] =
+    useState<DashboardData>(
+      EMPTY_DATA,
+    );
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [error, setError] =
     useState<string | null>(null);
-
-  const [state, setState] =
-    useState<DashboardState>(EMPTY_STATE);
-
-  const [loading, setLoading] = useState(true);
-
-  const [error, setError] = useState<string | null>(
-    null,
-  );
 
   const [selectedTermId, setSelectedTermId] =
     useState<number | null>(null);
 
-  const [terms, setTerms] = useState<Term[]>([]);
-
   const [loadingSubjects, setLoadingSubjects] =
     useState(false);
 
-  const [subjectsError, setSubjectsError] =
-    useState<string | null>(null);
-
   /*
-   * ------------------------------------------------------------
-   * Resolve the current student profile
-   * ------------------------------------------------------------
+   * ============================================================
+   * Load authenticated student
+   * ============================================================
    *
-   * The backend validates the authenticated user against
-   * student_profile_id.
+   * The Supabase session is the source of identity.
    *
-   * The dashboard therefore never trusts the ID for authorization.
-   * The API performs the actual authorization check.
+   * We do NOT read student_profile_id from localStorage.
+   *
+   * The backend still performs the final authorization check:
+   * authenticated user id === student_profile_id.
    */
 
   useEffect(() => {
-    setStudentProfileId(
-      getStudentProfileId(),
-    );
-  }, []);
-
-  /*
-   * ------------------------------------------------------------
-   * Load student dashboard data
-   * ------------------------------------------------------------
-   *
-   * Backend endpoints:
-   *
-   * GET /students/{id}
-   * GET /students/{id}/dashboard
-   * GET /students/{id}/progress
-   * GET /students/{id}/analytics
-   * GET /students/{id}/streak
-   * GET /students/{id}/xp
-   * GET /students/{id}/achievements
-   *
-   * Database source:
-   *
-   * student_profiles
-   * student_dashboard_summary
-   * lesson_progress
-   * student_subject_metrics
-   * concept_mastery
-   * learning_recommendations
-   * student_streaks
-   * xp_transactions
-   * student_achievements
-   * achievements
-   */
-
-  useEffect(() => {
-    if (!studentProfileId) {
-      setLoading(false);
-      setError(
-        "لم يتم العثور على ملف الطالب الحالي. تأكد من تسجيل الدخول وإعداد student_profile_id.",
-      );
-      return;
-    }
-
     let active = true;
 
     const loadDashboard = async () => {
@@ -226,10 +190,33 @@ const StudentDashboard: React.FC = () => {
       setError(null);
 
       try {
+        const {
+          data: sessionData,
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        const session =
+          sessionData.session;
+
+        if (!session?.user?.id) {
+          throw new Error(
+            "لم يتم العثور على جلسة تسجيل الدخول.",
+          );
+        }
+
+        const studentProfileId =
+          session.user.id;
+
+        const token =
+          session.access_token;
+
         const [
           profile,
           dashboard,
-          progress,
           analytics,
           streak,
           xp,
@@ -237,24 +224,32 @@ const StudentDashboard: React.FC = () => {
         ] = await Promise.all([
           apiClient.getStudent(
             studentProfileId,
+            token,
           ),
+
           apiClient.getStudentDashboard(
             studentProfileId,
+            token,
           ),
-          apiClient.getStudentProgress(
-            studentProfileId,
-          ),
+
           apiClient.getStudentAnalytics(
             studentProfileId,
+            token,
           ),
+
           apiClient.getStudentStreak(
             studentProfileId,
+            token,
           ),
+
           apiClient.getStudentXp(
             studentProfileId,
+            token,
           ),
+
           apiClient.getStudentAchievements(
             studentProfileId,
+            token,
           ),
         ]);
 
@@ -264,75 +259,125 @@ const StudentDashboard: React.FC = () => {
 
         let grade: Grade | null = null;
 
-        if (profile.grade_id !== null &&
-            profile.grade_id !== undefined) {
+        if (
+          profile.grade_id !== null &&
+          profile.grade_id !== undefined
+        ) {
           try {
-            grade = await apiClient.getGrade(
-              profile.grade_id,
-            );
-          } catch (gradeError) {
-            console.warn(
-              "Failed to load student grade:",
-              gradeError,
-            );
+            grade =
+              await apiClient.getGrade(
+                profile.grade_id,
+                token,
+              );
+          } catch {
+            grade = null;
+          }
+        }
+
+        let terms: Term[] = [];
+
+        if (
+          profile.grade_id !== null &&
+          profile.grade_id !== undefined
+        ) {
+          try {
+            terms =
+              await apiClient.getGradeTerms(
+                profile.grade_id,
+                token,
+              );
+          } catch {
+            terms = [];
           }
         }
 
         const metrics =
-          analytics?.subject_metrics ?? [];
+          analytics.subject_metrics ?? [];
 
-        const subjectResults =
+        const subjectCards =
           await Promise.all(
-            metrics.map(async (metric) => {
-              try {
-                const subject =
-                  await apiClient.getSubject(
-                    metric.subject_id,
-                  );
+            metrics.map(
+              async (metric) => {
+                try {
+                  const subject =
+                    await apiClient.getSubject(
+                      metric.subject_id,
+                      token,
+                    );
 
-                return {
-                  ...subject,
-                  metric,
-                } satisfies SubjectWithMetric;
-              } catch (subjectError) {
-                console.warn(
-                  `Failed to load subject ${metric.subject_id}:`,
-                  subjectError,
-                );
-
-                return null;
-              }
-            }),
+                  return {
+                    ...subject,
+                    lessons_total:
+                      numberValue(
+                        metric.lessons_total,
+                      ),
+                    lessons_completed:
+                      numberValue(
+                        metric.lessons_completed,
+                      ),
+                    questions_answered:
+                      numberValue(
+                        metric.questions_answered,
+                      ),
+                    questions_correct:
+                      numberValue(
+                        metric.questions_correct,
+                      ),
+                    accuracy:
+                      percentValue(
+                        metric.accuracy,
+                      ),
+                    mastery_score:
+                      percentValue(
+                        metric.mastery_score,
+                      ),
+                    xp_earned:
+                      numberValue(
+                        metric.xp_earned,
+                      ),
+                  };
+                } catch {
+                  return null;
+                }
+              },
+            ),
           );
 
         if (!active) {
           return;
         }
 
-        setState({
+        setData({
           profile,
+          grade,
           dashboard,
           analytics,
           streak,
           xp,
           achievements:
-            Array.isArray(achievements)
+            Array.isArray(
+              achievements,
+            )
               ? achievements
               : [],
-          progressCount: Array.isArray(progress)
-            ? progress.length
-            : 0,
-          grade,
-          subjects: subjectResults.filter(
-            (
-              subject,
-            ): subject is SubjectWithMetric =>
-              subject !== null,
-          ),
+          subjects:
+            subjectCards.filter(
+              (
+                subject,
+              ): subject is SubjectCard =>
+                subject !== null,
+            ),
+          terms,
         });
+
+        setSelectedTermId(
+          terms.length > 0
+            ? terms[0].id
+            : null,
+        );
       } catch (loadError) {
         console.error(
-          "Failed to load student dashboard:",
+          "Student dashboard error:",
           loadError,
         );
 
@@ -340,10 +385,12 @@ const StudentDashboard: React.FC = () => {
           return;
         }
 
-        setState(EMPTY_STATE);
+        setData(EMPTY_DATA);
 
         setError(
-          "تعذر تحميل لوحة الطالب. تأكد من تسجيل الدخول واتصال الخادم بقاعدة البيانات.",
+          loadError instanceof Error
+            ? loadError.message
+            : "تعذر تحميل لوحة الطالب.",
         );
       } finally {
         if (active) {
@@ -357,94 +404,29 @@ const StudentDashboard: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [studentProfileId]);
+  }, []);
 
   /*
-   * ------------------------------------------------------------
-   * Load curriculum terms for the student's grade
-   * ------------------------------------------------------------
+   * ============================================================
+   * Load subjects for the selected term
+   * ============================================================
    */
 
   useEffect(() => {
-    const gradeId = state.profile?.grade_id;
-
     if (
-      gradeId === null ||
-      gradeId === undefined
+      selectedTermId === null
     ) {
-      setTerms([]);
-      setSelectedTermId(null);
       return;
     }
 
-    let active = true;
+    const selectedTerm =
+      data.terms.find(
+        (term) =>
+          term.id ===
+          selectedTermId,
+      );
 
-    const loadTerms = async () => {
-      try {
-        const loadedTerms =
-          await apiClient.getGradeTerms(
-            gradeId,
-          );
-
-        if (!active) {
-          return;
-        }
-
-        setTerms(
-          Array.isArray(loadedTerms)
-            ? loadedTerms
-            : [],
-        );
-
-        setSelectedTermId((current) => {
-          if (
-            current !== null &&
-            loadedTerms.some(
-              (term) =>
-                term.id === current,
-            )
-          ) {
-            return current;
-          }
-
-          return loadedTerms.length > 0
-            ? loadedTerms[0].id
-            : null;
-        });
-      } catch (loadError) {
-        console.warn(
-          "Failed to load student terms:",
-          loadError,
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setTerms([]);
-        setSelectedTermId(null);
-      }
-    };
-
-    loadTerms();
-
-    return () => {
-      active = false;
-    };
-  }, [state.profile?.grade_id]);
-
-  /*
-   * ------------------------------------------------------------
-   * Load subjects for selected term
-   * ------------------------------------------------------------
-   *
-   * The main dashboard already has subject metrics.
-   * This section loads the curriculum subjects so that the
-   * student can always enter the curriculum directly.
-   */
-
-  useEffect(() => {
-    if (selectedTermId === null) {
+    if (!selectedTerm) {
       return;
     }
 
@@ -452,53 +434,87 @@ const StudentDashboard: React.FC = () => {
 
     const loadSubjects = async () => {
       setLoadingSubjects(true);
-      setSubjectsError(null);
 
       try {
-        const loadedSubjects =
+        const {
+          data: sessionData,
+        } =
+          await supabase.auth.getSession();
+
+        const token =
+          sessionData.session
+            ?.access_token;
+
+        if (!token) {
+          return;
+        }
+
+        const subjects =
           await apiClient.getTermSubjects(
             selectedTermId,
+            token,
           );
 
         if (!active) {
           return;
         }
 
-        const existingMetrics =
-          state.analytics?.subject_metrics ??
-          [];
+        const metrics =
+          data.analytics
+            ?.subject_metrics ?? [];
 
         const merged =
-          loadedSubjects.map((subject) => {
-            const metric =
-              existingMetrics.find(
-                (item) =>
-                  item.subject_id ===
-                  subject.id,
-              );
+          subjects.map(
+            (subject) => {
+              const metric =
+                metrics.find(
+                  (item) =>
+                    item.subject_id ===
+                    subject.id,
+                );
 
-            return {
-              ...subject,
-              metric,
-            };
-          });
+              return {
+                ...subject,
+                lessons_total:
+                  numberValue(
+                    metric?.lessons_total,
+                  ),
+                lessons_completed:
+                  numberValue(
+                    metric?.lessons_completed,
+                  ),
+                questions_answered:
+                  numberValue(
+                    metric?.questions_answered,
+                  ),
+                questions_correct:
+                  numberValue(
+                    metric?.questions_correct,
+                  ),
+                accuracy:
+                  percentValue(
+                    metric?.accuracy,
+                  ),
+                mastery_score:
+                  percentValue(
+                    metric?.mastery_score,
+                  ),
+                xp_earned:
+                  numberValue(
+                    metric?.xp_earned,
+                  ),
+              };
+            },
+          );
 
-        setState((current) => ({
+        setData((current) => ({
           ...current,
           subjects: merged,
         }));
       } catch (loadError) {
         console.warn(
-          "Failed to load curriculum subjects:",
+          "Failed to load term subjects:",
           loadError,
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setSubjectsError(
-          "تعذر تحميل المواد الدراسية لهذا الترم.",
         );
       } finally {
         if (active) {
@@ -514,166 +530,131 @@ const StudentDashboard: React.FC = () => {
     };
   }, [
     selectedTermId,
-    state.analytics?.subject_metrics,
+    data.analytics,
+    data.terms,
   ]);
 
   /*
-   * ------------------------------------------------------------
-   * Derived dashboard values
-   * ------------------------------------------------------------
+   * ============================================================
+   * Derived values
+   * ============================================================
    */
 
-  const summary =
-    state.dashboard?.summary ?? null;
-
   const profile =
-    state.profile;
+    data.profile;
+
+  const summary =
+    data.dashboard?.summary;
 
   const streak =
-    state.streak ??
-    state.dashboard?.streak ??
+    data.streak ??
+    data.dashboard?.streak ??
+    null;
+
+  const xp =
+    data.xp?.profile ??
     null;
 
   const recommendations =
-    useMemo<LearningRecommendation[]>(
+    useMemo(
       () =>
-        Array.isArray(
-          state.dashboard?.recommendations,
-        )
-          ? state.dashboard!
-              .recommendations
-          : Array.isArray(
-                state.analytics
-                  ?.recommendations,
-              )
-            ? state.analytics!
-                .recommendations
-            : [],
+        data.dashboard
+          ?.recommendations ??
+        data.analytics
+          ?.recommendations ??
+        [],
       [
-        state.dashboard?.recommendations,
-        state.analytics?.recommendations,
+        data.dashboard,
+        data.analytics,
       ],
     );
-
-  const xpValue =
-    Number(
-      state.xp?.profile?.xp ??
-        profile?.xp ??
-        summary?.xp ??
-        0,
-    ) || 0;
-
-  const levelValue =
-    Number(
-      state.xp?.profile?.level ??
-        profile?.level ??
-        summary?.level ??
-        1,
-    ) || 1;
-
-  const completedLessons =
-    Number(
-      summary?.completed_lessons ?? 0,
-    ) || 0;
-
-  const gamesPlayed =
-    Number(
-      summary?.games_played ?? 0,
-    ) || 0;
-
-  const questionsAnswered =
-    Number(
-      summary?.questions_answered ?? 0,
-    ) || 0;
-
-  const correctAnswers =
-    Number(
-      summary?.correct_answers ?? 0,
-    ) || 0;
-
-  const accuracy =
-    Number(
-      summary?.accuracy_percent ??
-        (questionsAnswered > 0
-          ? (correctAnswers /
-              questionsAnswered) *
-            100
-          : 0),
-    ) || 0;
-
-  const currentStreak =
-    Number(
-      streak?.current_streak ?? 0,
-    ) || 0;
-
-  const longestStreak =
-    Number(
-      streak?.longest_streak ?? 0,
-    ) || 0;
-
-  const selectedTermTitle =
-    terms.find(
-      (term) =>
-        term.id === selectedTermId,
-    )?.title ?? "";
-
-  const gradeTitle =
-    state.grade?.title ??
-    (profile?.grade_id
-      ? `الصف ${profile.grade_id}`
-      : "غير محدد");
 
   const studentName =
     profile?.display_name?.trim() ||
     "الطالب";
 
-  const topRecommendations =
-    recommendations.slice(0, 4);
+  const gradeTitle =
+    data.grade?.title ||
+    "الصف الدراسي";
 
-  const visibleSubjects =
-    state.subjects.slice(0, 8);
+  const currentXp =
+    numberValue(
+      xp?.xp ??
+        profile?.xp,
+    );
+
+  const currentLevel =
+    numberValue(
+      xp?.level ??
+        profile?.level,
+      1,
+    );
+
+  const completedLessons =
+    getSummaryNumber(
+      summary,
+      "completed_lessons",
+    );
+
+  const gamesPlayed =
+    getSummaryNumber(
+      summary,
+      "games_played",
+    );
+
+  const questionsAnswered =
+    getSummaryNumber(
+      summary,
+      "questions_answered",
+    );
+
+  const correctAnswers =
+    getSummaryNumber(
+      summary,
+      "correct_answers",
+    );
+
+  const accuracy =
+    summary?.accuracy_percent !==
+      undefined
+      ? percentValue(
+          summary.accuracy_percent,
+        )
+      : questionsAnswered > 0
+        ? (correctAnswers /
+            questionsAnswered) *
+          100
+        : 0;
+
+  const currentStreak =
+    numberValue(
+      streak?.current_streak,
+    );
+
+  const longestStreak =
+    numberValue(
+      streak?.longest_streak,
+    );
+
+  const selectedTerm =
+    data.terms.find(
+      (term) =>
+        term.id ===
+        selectedTermId,
+    );
+
+  const selectedSubjects =
+    data.subjects.filter(
+      (subject) =>
+        selectedTermId === null ||
+        subject.term_id ===
+          selectedTermId,
+    );
 
   /*
-   * ------------------------------------------------------------
-   * Navigation
-   * ------------------------------------------------------------
-   */
-
-  const openRecommendation = (
-    recommendation: LearningRecommendation,
-  ) => {
-    if (
-      recommendation.lesson_id !== null &&
-      recommendation.lesson_id !== undefined
-    ) {
-      navigate(
-        `/lesson/${recommendation.lesson_id}`,
-      );
-      return;
-    }
-
-    if (
-      recommendation.concept_id !== null &&
-      recommendation.concept_id !== undefined
-    ) {
-      return;
-    }
-
-    if (
-      recommendation.game_definition_id
-    ) {
-      return;
-    }
-  };
-
-  const refreshPage = () => {
-    window.location.reload();
-  };
-
-  /*
-   * ------------------------------------------------------------
+   * ============================================================
    * Loading
-   * ------------------------------------------------------------
+   * ============================================================
    */
 
   if (loading) {
@@ -682,23 +663,23 @@ const StudentDashboard: React.FC = () => {
         dir="rtl"
         className="min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-100 px-4 py-8"
       >
-        <div className="max-w-6xl mx-auto space-y-6">
-          <section className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center shadow-xl">
+        <div className="max-w-6xl mx-auto">
+          <section
+            className="bg-slate-900 border border-slate-800 rounded-3xl p-10 text-center"
+            role="status"
+            aria-live="polite"
+          >
             <div className="text-5xl mb-4">
               🎓
             </div>
 
             <h1 className="text-xl font-black text-amber-400">
-              جاري تجهيز لوحة الطالب
+              جاري تحميل لوحة الطالب
             </h1>
 
-            <p className="text-sm text-slate-400 mt-2">
-              جاري تحميل بيانات التعلم والتقدم.
+            <p className="text-sm text-slate-500 mt-2">
+              جاري الاتصال ببيانات التعلم الخاصة بك.
             </p>
-
-            <div className="mt-5 h-2 rounded-full bg-slate-800 overflow-hidden">
-              <div className="h-full w-1/2 bg-amber-500 rounded-full animate-pulse" />
-            </div>
           </section>
         </div>
       </main>
@@ -706,9 +687,9 @@ const StudentDashboard: React.FC = () => {
   }
 
   /*
-   * ------------------------------------------------------------
-   * Error / missing profile
-   * ------------------------------------------------------------
+   * ============================================================
+   * Error
+   * ============================================================
    */
 
   if (error || !profile) {
@@ -718,7 +699,10 @@ const StudentDashboard: React.FC = () => {
         className="min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-100 px-4 py-8"
       >
         <div className="max-w-xl mx-auto">
-          <section className="bg-slate-900 border border-red-900/50 rounded-3xl p-8 text-center shadow-xl">
+          <section
+            className="bg-slate-900 border border-red-900/50 rounded-3xl p-8 text-center"
+            role="alert"
+          >
             <div className="text-5xl mb-4">
               ⚠️
             </div>
@@ -727,14 +711,16 @@ const StudentDashboard: React.FC = () => {
               تعذر فتح لوحة الطالب
             </h1>
 
-            <p className="text-sm text-slate-400 leading-7 mt-3">
+            <p className="text-sm text-slate-400 mt-3 leading-7">
               {error ??
                 "بيانات الطالب غير متاحة حاليًا."}
             </p>
 
             <button
               type="button"
-              onClick={refreshPage}
+              onClick={() =>
+                window.location.reload()
+              }
               className="mt-6 px-6 py-3 rounded-xl bg-amber-500 text-slate-950 font-black text-sm hover:bg-amber-400 transition"
             >
               إعادة المحاولة
@@ -746,9 +732,9 @@ const StudentDashboard: React.FC = () => {
   }
 
   /*
-   * ------------------------------------------------------------
-   * Main dashboard
-   * ------------------------------------------------------------
+   * ============================================================
+   * Dashboard
+   * ============================================================
    */
 
   return (
@@ -758,13 +744,9 @@ const StudentDashboard: React.FC = () => {
     >
       <div className="max-w-6xl mx-auto space-y-6 pb-12">
 
-        {/* ====================================================== */}
         {/* Student header */}
-        {/* ====================================================== */}
 
         <section className="relative overflow-hidden bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl">
-          <div className="absolute -top-20 -left-20 w-48 h-48 rounded-full bg-amber-500/10 blur-3xl" />
-
           <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
 
             <div className="flex items-center gap-4">
@@ -784,7 +766,7 @@ const StudentDashboard: React.FC = () => {
               </div>
 
               <div>
-                <p className="text-xs font-bold text-slate-500">
+                <p className="text-xs text-slate-500 font-bold">
                   مرحبًا بك
                 </p>
 
@@ -799,7 +781,10 @@ const StudentDashboard: React.FC = () => {
                   </span>
 
                   <span className="px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[11px] font-black text-amber-400">
-                    المستوى {formatNumber(levelValue)}
+                    المستوى{" "}
+                    {formatNumber(
+                      currentLevel,
+                    )}
                   </span>
 
                 </div>
@@ -807,15 +792,17 @@ const StudentDashboard: React.FC = () => {
 
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:w-auto">
+            <div className="grid grid-cols-2 gap-3">
 
-              <div className="min-w-[120px] bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center">
-                <div className="text-xl">
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center min-w-[110px]">
+                <div className="text-2xl">
                   ⚡
                 </div>
 
                 <div className="text-lg font-black text-amber-400 mt-1">
-                  {formatNumber(xpValue)}
+                  {formatNumber(
+                    currentXp,
+                  )}
                 </div>
 
                 <div className="text-[10px] text-slate-500 font-bold">
@@ -823,13 +810,15 @@ const StudentDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="min-w-[120px] bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center">
-                <div className="text-xl">
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 text-center min-w-[110px]">
+                <div className="text-2xl">
                   🔥
                 </div>
 
                 <div className="text-lg font-black text-amber-400 mt-1">
-                  {formatNumber(currentStreak)}
+                  {formatNumber(
+                    currentStreak,
+                  )}
                 </div>
 
                 <div className="text-[10px] text-slate-500 font-bold">
@@ -842,25 +831,19 @@ const StudentDashboard: React.FC = () => {
           </div>
         </section>
 
-        {/* ====================================================== */}
-        {/* Main statistics */}
-        {/* ====================================================== */}
+        {/* Statistics */}
 
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-2xl">
-                📘
-              </span>
-
-              <span className="text-[10px] text-slate-500 font-bold">
-                الدروس
-              </span>
+            <div className="text-2xl">
+              📘
             </div>
 
-            <div className="mt-3 text-2xl font-black text-slate-100">
-              {formatNumber(completedLessons)}
+            <div className="text-2xl font-black mt-3">
+              {formatNumber(
+                completedLessons,
+              )}
             </div>
 
             <p className="text-xs text-slate-500 mt-1">
@@ -869,18 +852,14 @@ const StudentDashboard: React.FC = () => {
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-2xl">
-                🎮
-              </span>
-
-              <span className="text-[10px] text-slate-500 font-bold">
-                الألعاب
-              </span>
+            <div className="text-2xl">
+              🎮
             </div>
 
-            <div className="mt-3 text-2xl font-black text-slate-100">
-              {formatNumber(gamesPlayed)}
+            <div className="text-2xl font-black mt-3">
+              {formatNumber(
+                gamesPlayed,
+              )}
             </div>
 
             <p className="text-xs text-slate-500 mt-1">
@@ -889,18 +868,14 @@ const StudentDashboard: React.FC = () => {
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-2xl">
-                📝
-              </span>
-
-              <span className="text-[10px] text-slate-500 font-bold">
-                الأسئلة
-              </span>
+            <div className="text-2xl">
+              📝
             </div>
 
-            <div className="mt-3 text-2xl font-black text-slate-100">
-              {formatNumber(questionsAnswered)}
+            <div className="text-2xl font-black mt-3">
+              {formatNumber(
+                questionsAnswered,
+              )}
             </div>
 
             <p className="text-xs text-slate-500 mt-1">
@@ -909,18 +884,14 @@ const StudentDashboard: React.FC = () => {
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-2xl">
-                🎯
-              </span>
-
-              <span className="text-[10px] text-slate-500 font-bold">
-                الدقة
-              </span>
+            <div className="text-2xl">
+              🎯
             </div>
 
-            <div className="mt-3 text-2xl font-black text-amber-400">
-              {formatPercent(accuracy)}
+            <div className="text-2xl font-black text-amber-400 mt-3">
+              {formatPercent(
+                accuracy,
+              )}
             </div>
 
             <p className="text-xs text-slate-500 mt-1">
@@ -930,11 +901,10 @@ const StudentDashboard: React.FC = () => {
 
         </section>
 
-        {/* ====================================================== */}
-        {/* Learning streak */}
-        {/* ====================================================== */}
+        {/* Streak */}
 
         <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
+
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
 
             <div>
@@ -943,13 +913,13 @@ const StudentDashboard: React.FC = () => {
                   🔥
                 </span>
 
-                <h2 className="text-lg font-black text-slate-100">
+                <h2 className="text-lg font-black">
                   سلسلة التعلم
                 </h2>
               </div>
 
               <p className="text-xs text-slate-500 mt-2">
-                استمر في التعلم يوميًا وحافظ على تقدمك.
+                حافظ على الاستمرارية في التعلم كل يوم.
               </p>
             </div>
 
@@ -957,20 +927,24 @@ const StudentDashboard: React.FC = () => {
 
               <div className="bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-center">
                 <div className="text-xl font-black text-amber-400">
-                  {formatNumber(currentStreak)}
+                  {formatNumber(
+                    currentStreak,
+                  )}
                 </div>
 
-                <div className="text-[10px] text-slate-500 font-bold mt-1">
+                <div className="text-[10px] text-slate-500 mt-1">
                   السلسلة الحالية
                 </div>
               </div>
 
               <div className="bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-center">
-                <div className="text-xl font-black text-slate-200">
-                  {formatNumber(longestStreak)}
+                <div className="text-xl font-black">
+                  {formatNumber(
+                    longestStreak,
+                  )}
                 </div>
 
-                <div className="text-[10px] text-slate-500 font-bold mt-1">
+                <div className="text-[10px] text-slate-500 mt-1">
                   أطول سلسلة
                 </div>
               </div>
@@ -978,184 +952,176 @@ const StudentDashboard: React.FC = () => {
             </div>
 
           </div>
+
         </section>
 
-        {/* ====================================================== */}
-        {/* Subjects */}
-        {/* ====================================================== */}
+        {/* Terms */}
 
-        <section className="space-y-4">
-
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        {data.terms.length > 0 && (
+          <section className="space-y-4">
 
             <div>
-              <h2 className="text-xl font-black text-slate-100">
-                📚 موادك الدراسية
+              <h2 className="text-xl font-black">
+                📚 المنهج الدراسي
               </h2>
 
               <p className="text-xs text-slate-500 mt-1">
-                {selectedTermTitle
-                  ? `مواد ${selectedTermTitle}`
-                  : "اختر الترم للوصول إلى المواد."}
+                اختر الترم لعرض مواده.
               </p>
             </div>
 
-            {terms.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                {terms.map((term) => {
-                  const selected =
-                    selectedTermId ===
-                    term.id;
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {data.terms.map(
+                (term) => (
+                  <button
+                    key={term.id}
+                    type="button"
+                    onClick={() =>
+                      setSelectedTermId(
+                        term.id,
+                      )
+                    }
+                    className={`shrink-0 px-5 py-2.5 rounded-xl border text-xs font-black transition ${
+                      selectedTermId ===
+                      term.id
+                        ? "bg-amber-500 text-slate-950 border-amber-400"
+                        : "bg-slate-900 text-slate-400 border-slate-800 hover:border-amber-500/40"
+                    }`}
+                  >
+                    {term.title}
+                  </button>
+                ),
+              )}
+            </div>
 
-                  return (
-                    <button
-                      key={term.id}
-                      type="button"
-                      onClick={() =>
-                        setSelectedTermId(
-                          term.id,
-                        )
-                      }
-                      className={`shrink-0 px-4 py-2 rounded-xl border text-xs font-black transition ${
-                        selected
-                          ? "bg-amber-500 text-slate-950 border-amber-400"
-                          : "bg-slate-900 text-slate-400 border-slate-800 hover:border-amber-500/40 hover:text-amber-400"
-                      }`}
-                    >
-                      {term.title}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+          </section>
+        )}
 
+        {/* Subjects */}
+
+        <section className="space-y-4">
+
+          <div>
+            <h2 className="text-xl font-black">
+              {selectedTerm
+                ? `مواد ${selectedTerm.title}`
+                : "المواد الدراسية"}
+            </h2>
+
+            <p className="text-xs text-slate-500 mt-1">
+              اختر المادة للانتقال إلى وحداتها.
+            </p>
           </div>
 
-          {subjectsError ? (
-            <div className="bg-slate-900 border border-red-900/50 rounded-2xl p-5">
-              <p className="text-sm text-red-400 font-bold">
-                {subjectsError}
-              </p>
-            </div>
-          ) : loadingSubjects ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center">
-              <p className="text-xs text-amber-400 animate-pulse font-bold">
+          {loadingSubjects ? (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
+              <p className="text-sm text-amber-400 font-bold animate-pulse">
                 جاري تحميل المواد...
               </p>
             </div>
-          ) : visibleSubjects.length === 0 ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center">
-              <p className="text-sm text-slate-400">
-                لا توجد مواد متاحة لهذا الترم حاليًا.
+          ) : selectedSubjects.length === 0 ? (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
+              <div className="text-4xl">
+                📚
+              </div>
+
+              <p className="text-sm text-slate-400 mt-3">
+                لا توجد مواد متاحة حاليًا.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
-              {visibleSubjects.map(
-                (subject) => {
-                  const metric =
-                    subject.metric;
+              {selectedSubjects.map(
+                (subject) => (
+                  <button
+                    key={subject.id}
+                    type="button"
+                    onClick={() =>
+                      navigate(
+                        `/subject/${subject.id}`,
+                      )
+                    }
+                    className="text-right bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-amber-500/40 transition group"
+                  >
+                    <div className="flex items-start justify-between gap-4">
 
-                  const mastery =
-                    Number(
-                      metric?.mastery_score ??
-                        0,
-                    ) || 0;
+                      <div className="flex items-center gap-3 min-w-0">
 
-                  const subjectAccuracy =
-                    Number(
-                      metric?.accuracy ?? 0,
-                    ) || 0;
+                        <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl shrink-0">
+                          {subject.icon_name ||
+                            "📚"}
+                        </div>
 
-                  return (
-                    <button
-                      key={subject.id}
-                      type="button"
-                      onClick={() =>
-                        navigate(
-                          `/subject/${subject.id}`,
-                        )
-                      }
-                      className="text-right bg-slate-900 border border-slate-800 rounded-2xl p-5 hover:border-amber-500/40 hover:bg-slate-900/80 transition-all group"
-                    >
-                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
 
-                        <div className="flex items-center gap-3 min-w-0">
+                          <h3 className="font-black text-sm group-hover:text-amber-400 transition">
+                            {subject.title}
+                          </h3>
 
-                          <div className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl shrink-0">
-                            {subject.icon_name ||
-                              "📚"}
-                          </div>
-
-                          <div className="min-w-0">
-                            <h3 className="font-black text-sm text-slate-100 group-hover:text-amber-400 transition">
-                              {subject.title}
-                            </h3>
-
-                            <p className="text-[10px] text-slate-500 mt-1">
-                              {subject.code}
-                            </p>
-                          </div>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            {subject.code}
+                          </p>
 
                         </div>
 
-                        <span className="text-slate-600 group-hover:text-amber-400 transition">
-                          ←
+                      </div>
+
+                      <span className="text-slate-600 group-hover:text-amber-400">
+                        ←
+                      </span>
+
+                    </div>
+
+                    <div className="mt-5">
+
+                      <div className="flex items-center justify-between text-[10px] mb-1.5">
+                        <span className="text-slate-500">
+                          الإتقان
                         </span>
 
+                        <span className="text-amber-400 font-black">
+                          {formatPercent(
+                            subject.mastery_score,
+                          )}
+                        </span>
                       </div>
 
-                      <div className="mt-5 space-y-3">
-
-                        <div>
-                          <div className="flex items-center justify-between text-[10px] mb-1.5">
-                            <span className="text-slate-500">
-                              الإتقان
-                            </span>
-
-                            <span className="font-black text-amber-400">
-                              {formatPercent(
-                                mastery,
-                              )}
-                            </span>
-                          </div>
-
-                          <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-amber-500 rounded-full transition-all"
-                              style={{
-                                width: `${Math.min(
-                                  100,
-                                  Math.max(
-                                    0,
-                                    mastery,
-                                  ),
-                                )}%`,
-                              }}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="text-slate-500">
-                            {getMetricLabel(
-                              metric,
-                            )}
-                          </span>
-
-                          <span className="text-slate-500">
-                            دقة{" "}
-                            {formatPercent(
-                              subjectAccuracy,
-                            )}
-                          </span>
-                        </div>
-
+                      <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-500 rounded-full"
+                          style={{
+                            width: `${percentValue(
+                              subject.mastery_score,
+                            )}%`,
+                          }}
+                        />
                       </div>
-                    </button>
-                  );
-                },
+
+                    </div>
+
+                    <div className="flex items-center justify-between mt-3 text-[10px] text-slate-500">
+                      <span>
+                        {formatNumber(
+                          subject.lessons_completed,
+                        )}{" "}
+                        /{" "}
+                        {formatNumber(
+                          subject.lessons_total,
+                        )}{" "}
+                        درس
+                      </span>
+
+                      <span>
+                        دقة{" "}
+                        {formatPercent(
+                          subject.accuracy,
+                        )}
+                      </span>
+                    </div>
+
+                  </button>
+                ),
               )}
 
             </div>
@@ -1163,306 +1129,193 @@ const StudentDashboard: React.FC = () => {
 
         </section>
 
-        {/* ====================================================== */}
         {/* Recommendations */}
-        {/* ====================================================== */}
 
         <section className="space-y-4">
 
           <div>
-            <h2 className="text-xl font-black text-slate-100">
+            <h2 className="text-xl font-black">
               ⭐ مقترح لك
             </h2>
 
             <p className="text-xs text-slate-500 mt-1">
-              توصيات مبنية على بيانات التعلم والتقدم.
+              توصيات مبنية على تقدمك الفعلي.
             </p>
           </div>
 
-          {topRecommendations.length === 0 ? (
+          {recommendations.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">
-                  💡
-                </span>
-
-                <div>
-                  <p className="text-sm font-black text-slate-200">
-                    لا توجد توصيات جديدة حاليًا.
-                  </p>
-
-                  <p className="text-xs text-slate-500 mt-1">
-                    استمر في التعلم وستظهر التوصيات مع
-                    توفر بيانات أكثر عن تقدمك.
-                  </p>
-                </div>
-              </div>
+              <p className="text-sm text-slate-400">
+                لا توجد توصيات جديدة حاليًا.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-              {topRecommendations.map(
-                (recommendation) => {
-                  const actionable =
-                    recommendation.lesson_id !==
-                      null &&
-                    recommendation.lesson_id !==
-                      undefined;
+              {recommendations
+                .slice(0, 4)
+                .map(
+                  (recommendation) => {
+                    const lessonId =
+                      recommendation.lesson_id;
 
-                  return (
-                    <button
-                      key={recommendation.id}
-                      type="button"
-                      onClick={() =>
-                        openRecommendation(
-                          recommendation,
-                        )
-                      }
-                      disabled={!actionable}
-                      className={`text-right bg-slate-900 border border-slate-800 rounded-2xl p-5 transition ${
-                        actionable
-                          ? "hover:border-amber-500/40 hover:bg-slate-900/80"
-                          : "cursor-default"
-                      }`}
-                    >
-                      <div className="flex gap-4">
+                    const canOpenLesson =
+                      lessonId !==
+                        null &&
+                      lessonId !==
+                        undefined;
 
-                        <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xl shrink-0">
-                          {getRecommendationIcon(
-                            recommendation.recommendation_type,
-                          )}
-                        </div>
+                    return (
+                      <button
+                        key={
+                          recommendation.id
+                        }
+                        type="button"
+                        disabled={
+                          !canOpenLesson
+                        }
+                        onClick={() => {
+                          if (
+                            canOpenLesson
+                          ) {
+                            navigate(
+                              `/lesson/${lessonId}`,
+                            );
+                          }
+                        }}
+                        className={`text-right bg-slate-900 border border-slate-800 rounded-2xl p-5 transition ${
+                          canOpenLesson
+                            ? "hover:border-amber-500/40"
+                            : "opacity-80 cursor-default"
+                        }`}
+                      >
+                        <div className="flex gap-4">
 
-                        <div className="min-w-0 flex-1">
-
-                          <div className="flex items-start justify-between gap-3">
-
-                            <h3 className="font-black text-sm text-slate-100">
-                              {recommendation.title}
-                            </h3>
-
-                            <span className="text-[10px] font-black text-amber-400 shrink-0">
-                              {formatNumber(
-                                Number(
-                                  recommendation.priority ??
-                                    0,
-                                ),
-                              )}
-                            </span>
-
+                          <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xl shrink-0">
+                            {recommendationIcon(
+                              recommendation.recommendation_type,
+                            )}
                           </div>
 
-                          {recommendation.reason && (
-                            <p className="text-xs text-slate-500 leading-6 mt-2">
-                              {recommendation.reason}
-                            </p>
-                          )}
+                          <div className="flex-1 min-w-0">
 
-                          <div className="flex items-center justify-between gap-3 mt-3">
+                            <h3 className="font-black text-sm">
+                              {
+                                recommendation.title
+                              }
+                            </h3>
 
-                            <span className="text-[10px] text-slate-600">
-                              {recommendation.generated_by ||
-                                "analytics"}
-                            </span>
+                            {recommendation.reason && (
+                              <p className="text-xs text-slate-500 leading-6 mt-2">
+                                {
+                                  recommendation.reason
+                                }
+                              </p>
+                            )}
 
-                            {actionable && (
-                              <span className="text-[10px] font-black text-amber-400">
+                            {canOpenLesson && (
+                              <p className="text-[10px] text-amber-400 font-black mt-3">
                                 فتح الدرس ←
-                              </span>
+                              </p>
                             )}
 
                           </div>
 
                         </div>
-
-                      </div>
-                    </button>
-                  );
-                },
-              )}
+                      </button>
+                    );
+                  },
+                )}
 
             </div>
           )}
 
         </section>
 
-        {/* ====================================================== */}
         {/* Achievements */}
-        {/* ====================================================== */}
 
         <section className="space-y-4">
 
           <div>
-            <h2 className="text-xl font-black text-slate-100">
+            <h2 className="text-xl font-black">
               🏆 إنجازاتك
             </h2>
 
             <p className="text-xs text-slate-500 mt-1">
-              الإنجازات التي حصلت عليها حتى الآن.
+              الإنجازات التي حصلت عليها.
             </p>
           </div>
 
-          {state.achievements.length === 0 ? (
+          {data.achievements.length === 0 ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">
-                  🏅
-                </span>
-
-                <div>
-                  <p className="text-sm font-black text-slate-200">
-                    لم تحصل على إنجازات بعد.
-                  </p>
-
-                  <p className="text-xs text-slate-500 mt-1">
-                    أكمل الدروس والألعاب والأنشطة لتحصل على
-                    إنجازات جديدة.
-                  </p>
-                </div>
-              </div>
+              <p className="text-sm text-slate-400">
+                لم تحصل على إنجازات بعد.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
 
-              {state.achievements
+              {data.achievements
                 .slice(0, 8)
-                .map((achievement) => (
-                  <div
-                    key={achievement.id}
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center"
-                  >
-                    <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center overflow-hidden">
+                .map(
+                  (achievement) => (
+                    <div
+                      key={
+                        achievement.id
+                      }
+                      className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center"
+                    >
+                      <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center overflow-hidden">
+                        {achievement.icon_url ? (
+                          <img
+                            src={
+                              achievement.icon_url
+                            }
+                            alt={
+                              achievement.name
+                            }
+                            className="w-9 h-9 object-contain"
+                          />
+                        ) : (
+                          <span className="text-2xl">
+                            🏆
+                          </span>
+                        )}
+                      </div>
 
-                      {achievement.icon_url ? (
-                        <img
-                          src={achievement.icon_url}
-                          alt={achievement.name}
-                          className="w-9 h-9 object-contain"
-                        />
-                      ) : (
-                        <span className="text-2xl">
-                          🏆
-                        </span>
+                      <h3 className="text-xs font-black mt-3">
+                        {
+                          achievement.name
+                        }
+                      </h3>
+
+                      {achievement.description && (
+                        <p className="text-[10px] text-slate-500 leading-5 mt-1">
+                          {
+                            achievement.description
+                          }
+                        </p>
                       )}
 
+                      <div className="text-[10px] text-amber-400 font-black mt-2">
+                        +
+                        {formatNumber(
+                          achievement.xp_reward,
+                        )}{" "}
+                        XP
+                      </div>
+
+                      <div className="text-[9px] text-slate-600 mt-1">
+                        {formatDate(
+                          achievement.earned_at,
+                        )}
+                      </div>
                     </div>
-
-                    <h3 className="text-xs font-black text-slate-200 mt-3">
-                      {achievement.name}
-                    </h3>
-
-                    {achievement.description && (
-                      <p className="text-[10px] text-slate-500 leading-5 mt-1">
-                        {achievement.description}
-                      </p>
-                    )}
-
-                    <div className="text-[10px] text-amber-400 font-black mt-2">
-                      +{formatNumber(
-                        achievement.xp_reward,
-                      )} XP
-                    </div>
-
-                    <div className="text-[9px] text-slate-600 mt-1">
-                      {formatDate(
-                        achievement.earned_at,
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ),
+                )}
 
             </div>
           )}
-
-        </section>
-
-        {/* ====================================================== */}
-        {/* Quick learning actions */}
-        {/* ====================================================== */}
-
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-
-          <button
-            type="button"
-            onClick={() =>
-              navigate("/student")
-            }
-            className="bg-amber-500 text-slate-950 rounded-2xl p-5 text-right hover:bg-amber-400 transition"
-          >
-            <div className="text-2xl">
-              📚
-            </div>
-
-            <h3 className="font-black text-sm mt-3">
-              استكشف المنهج
-            </h3>
-
-            <p className="text-[10px] text-slate-800 mt-1">
-              تصفح الصفوف والفصول والمواد.
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              window.scrollTo({
-                top: 0,
-                behavior: "smooth",
-              })
-            }
-            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-right hover:border-amber-500/40 transition"
-          >
-            <div className="text-2xl">
-              📊
-            </div>
-
-            <h3 className="font-black text-sm mt-3">
-              راجع تقدمك
-            </h3>
-
-            <p className="text-[10px] text-slate-500 mt-1">
-              شاهد الإحصائيات والإتقان والإنجازات.
-            </p>
-          </button>
-
-          <button
-            type="button"
-            onClick={refreshPage}
-            className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-right hover:border-amber-500/40 transition"
-          >
-            <div className="text-2xl">
-              🔄
-            </div>
-
-            <h3 className="font-black text-sm mt-3">
-              تحديث البيانات
-            </h3>
-
-            <p className="text-[10px] text-slate-500 mt-1">
-              إعادة تحميل آخر بيانات من الخادم.
-            </p>
-          </button>
-
-        </section>
-
-        {/* ====================================================== */}
-        {/* Technical data footer */}
-        {/* ====================================================== */}
-
-        <section className="text-center pt-2">
-
-          <p className="text-[10px] text-slate-700">
-            آخر نشاط مسجل:{" "}
-            {formatDate(
-              streak?.last_activity_date,
-            )}
-          </p>
-
-          <p className="text-[9px] text-slate-800 mt-1">
-            تم تحميل {formatNumber(
-              state.progressCount,
-            )} سجل تقدم للطالب.
-          </p>
 
         </section>
 
@@ -1470,7 +1323,5 @@ const StudentDashboard: React.FC = () => {
     </main>
   );
 };
-
-export { StudentDashboard };
 
 export default StudentDashboard;
