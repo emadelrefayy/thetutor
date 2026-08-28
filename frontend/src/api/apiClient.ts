@@ -88,6 +88,12 @@ export const apiClient = {
     );
   },
 
+  getSubject(subjectId: number) {
+    return request(
+      `/subjects/${subjectId}`,
+    );
+  },
+
   getUnits(subjectId: number) {
     return request(
       `/subjects/${subjectId}/units`,
