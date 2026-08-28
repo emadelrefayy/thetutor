@@ -8,18 +8,13 @@ import {
 
 import Navbar from './components/Navbar';
 import AdminDashboard from './pages/AdminDashboard';
-import FamilyProgress from './pages/FamilyProgress';
-import StudySpace from './pages/StudySpace';
 import SubjectPage from './pages/SubjectPage';
 import UnitPage from './pages/UnitPage';
 import LessonPage from './pages/LessonPage';
-import ControlCenter from './pages/ControlCenter';
-import CurriculumExplorer from './pages/CurriculumExplorer';
 import NotFound from './pages/NotFound';
 
 import { StudentDashboard } from './pages/StudentDashboard';
 import { ParentDashboard } from './pages/ParentDashboard';
-
 
 export const App: React.FC = () => {
   return (
@@ -32,15 +27,9 @@ export const App: React.FC = () => {
 
         <main className="flex-1 w-full max-w-md sm:max-w-xl md:max-w-4xl mx-auto px-3 py-4">
           <Routes>
-
             <Route
               path="/"
-              element={
-                <Navigate
-                  to="/student"
-                  replace
-                />
-              }
+              element={<Navigate to="/student" replace />}
             />
 
             <Route
@@ -56,36 +45,6 @@ export const App: React.FC = () => {
             <Route
               path="/admin"
               element={<AdminDashboard />}
-            />
-
-            <Route
-              path="/control-center"
-              element={<ControlCenter />}
-            />
-
-            <Route
-              path="/control"
-              element={
-                <Navigate
-                  to="/control-center"
-                  replace
-                />
-              }
-            />
-
-            <Route
-              path="/family-progress"
-              element={<FamilyProgress />}
-            />
-
-            <Route
-              path="/study-space"
-              element={<StudySpace />}
-            />
-
-            <Route
-              path="/curriculum"
-              element={<CurriculumExplorer />}
             />
 
             <Route
@@ -107,13 +66,11 @@ export const App: React.FC = () => {
               path="*"
               element={<NotFound />}
             />
-
           </Routes>
         </main>
       </div>
     </Router>
   );
 };
-
 
 export default App;
