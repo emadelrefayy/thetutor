@@ -16,18 +16,31 @@ import type {
   Unit,
 } from '../api/apiClient';
 
+type Section =
+  | 'overview'
+  | 'content'
+  | 'subscribers'
+  | 'server';
+
+interface HealthResponse {
+  service?: string;
+  status?: string;
+  version?: string;
+}
 
 interface ConnectionState {
   status: 'checking' | 'connected' | 'error';
   message: string;
 }
 
-
 const AdminDashboard: React.FC = () => {
+  const [section, setSection] =
+    useState<Section>('overview');
+
   const [connection, setConnection] =
     useState<ConnectionState>({
       status: 'checking',
-      message: 'جاري اختبار الاتصال...',
+      message: 'جاري اختبار اتصال الـBackend...',
     });
 
   const [grades, setGrades] =
@@ -63,6 +76,8 @@ const AdminDashboard: React.FC = () => {
   const [error, setError] =
     useState<string | null>(null);
 
+  const [lastCheckedAt, setLastCheckedAt] =
+    useState<string | null>(null);
 
   const selectedGrade = useMemo(
     () =>
@@ -73,7 +88,6 @@ const AdminDashboard: React.FC = () => {
     [grades, selectedGradeId],
   );
 
-
   const selectedTerm = useMemo(
     () =>
       terms.find(
@@ -82,7 +96,6 @@ const AdminDashboard: React.FC = () => {
       ) ?? null,
     [terms, selectedTermId],
   );
-
 
   const selectedSubject = useMemo(
     () =>
@@ -93,7 +106,6 @@ const AdminDashboard: React.FC = () => {
     [subjects, selectedSubjectId],
   );
 
-
   const selectedUnit = useMemo(
     () =>
       units.find(
@@ -103,27 +115,70 @@ const AdminDashboard: React.FC = () => {
     [units, selectedUnitId],
   );
 
+  const testServerConnection =
+    useCallback(async () => {
+      setConnection({
+        status: 'checking',
+        message:
+          'جاري اختبار الاتصال بالـBackend...',
+      });
 
-  const loadInitialCurriculum =
+      try {
+        const response =
+          await apiClient.get<HealthResponse>(
+            '/health',
+          );
+
+        if (
+          !response ||
+          response.status !== 'healthy'
+        ) {
+          throw new Error(
+            'الـBackend استجاب ولكن حالة الخدمة غير سليمة.',
+          );
+        }
+
+        setConnection({
+          status: 'connected',
+          message:
+            'الاتصال بالـBackend يعمل بصورة صحيحة.',
+        });
+
+        setLastCheckedAt(
+          new Date().toLocaleString('ar-EG'),
+        );
+      } catch (err) {
+        console.error(
+          'Server health check failed:',
+          err,
+        );
+
+        setConnection({
+          status: 'error',
+          message:
+            err instanceof Error
+              ? err.message
+              : 'تعذر الاتصال بالـBackend.',
+        });
+
+        setLastCheckedAt(
+          new Date().toLocaleString('ar-EG'),
+        );
+      }
+    }, []);
+
+  const loadCurriculum =
     useCallback(async () => {
       setLoading(true);
       setError(null);
 
-      setConnection({
-        status: 'checking',
-        message:
-          'جاري الاتصال بالـBackend وقراءة المنهج...',
-      });
-
       try {
-        await apiClient.health();
-
         const loadedGrades =
           await apiClient.getGrades();
 
         if (!Array.isArray(loadedGrades)) {
           throw new Error(
-            'Invalid grades response.',
+            'استجابة الصفوف الدراسية غير صالحة.',
           );
         }
 
@@ -139,12 +194,6 @@ const AdminDashboard: React.FC = () => {
           setSelectedTermId(null);
           setSelectedSubjectId(null);
           setSelectedUnitId(null);
-
-          setConnection({
-            status: 'connected',
-            message:
-              'تم الاتصال بنجاح، ولكن لا توجد صفوف دراسية.',
-          });
 
           return;
         }
@@ -167,7 +216,7 @@ const AdminDashboard: React.FC = () => {
 
         if (!Array.isArray(loadedTerms)) {
           throw new Error(
-            'Invalid terms response.',
+            'استجابة الفصول الدراسية غير صالحة.',
           );
         }
 
@@ -181,12 +230,6 @@ const AdminDashboard: React.FC = () => {
           setSelectedTermId(null);
           setSelectedSubjectId(null);
           setSelectedUnitId(null);
-
-          setConnection({
-            status: 'connected',
-            message:
-              'تم الاتصال، ولكن لا توجد فصول لهذا الصف.',
-          });
 
           return;
         }
@@ -209,7 +252,7 @@ const AdminDashboard: React.FC = () => {
 
         if (!Array.isArray(loadedSubjects)) {
           throw new Error(
-            'Invalid subjects response.',
+            'استجابة المواد الدراسية غير صالحة.',
           );
         }
 
@@ -221,12 +264,6 @@ const AdminDashboard: React.FC = () => {
 
           setSelectedSubjectId(null);
           setSelectedUnitId(null);
-
-          setConnection({
-            status: 'connected',
-            message:
-              'تم الاتصال، ولكن لا توجد مواد لهذا الفصل.',
-          });
 
           return;
         }
@@ -250,7 +287,7 @@ const AdminDashboard: React.FC = () => {
 
         if (!Array.isArray(loadedUnits)) {
           throw new Error(
-            'Invalid units response.',
+            'استجابة الوحدات غير صالحة.',
           );
         }
 
@@ -259,12 +296,6 @@ const AdminDashboard: React.FC = () => {
         if (loadedUnits.length === 0) {
           setLessons([]);
           setSelectedUnitId(null);
-
-          setConnection({
-            status: 'connected',
-            message:
-              'تم الاتصال، ولكن لا توجد وحدات لهذه المادة.',
-          });
 
           return;
         }
@@ -287,20 +318,14 @@ const AdminDashboard: React.FC = () => {
 
         if (!Array.isArray(loadedLessons)) {
           throw new Error(
-            'Invalid lessons response.',
+            'استجابة الدروس غير صالحة.',
           );
         }
 
         setLessons(loadedLessons);
-
-        setConnection({
-          status: 'connected',
-          message:
-            'الاتصال بالـBackend يعمل، وتم تحميل المنهج بنجاح.',
-        });
       } catch (err) {
         console.error(
-          'Studio curriculum loading failed:',
+          'Curriculum loading failed:',
           err,
         );
 
@@ -315,16 +340,10 @@ const AdminDashboard: React.FC = () => {
         setSelectedSubjectId(null);
         setSelectedUnitId(null);
 
-        setConnection({
-          status: 'error',
-          message:
-            err instanceof Error
-              ? err.message
-              : 'فشل الاتصال بالـBackend.',
-        });
-
         setError(
-          'تعذر تحميل هيكل المنهج من قاعدة البيانات.',
+          err instanceof Error
+            ? err.message
+            : 'تعذر تحميل هيكل المنهج.',
         );
       } finally {
         setLoading(false);
@@ -336,17 +355,18 @@ const AdminDashboard: React.FC = () => {
       selectedUnitId,
     ]);
 
+  useEffect(() => {
+    testServerConnection();
+  }, [testServerConnection]);
 
   useEffect(() => {
-    loadInitialCurriculum();
-  }, [loadInitialCurriculum]);
-
+    loadCurriculum();
+  }, [loadCurriculum]);
 
   const handleGradeChange = async (
     gradeId: number,
   ) => {
     setSelectedGradeId(gradeId);
-
     setSelectedTermId(null);
     setSelectedSubjectId(null);
     setSelectedUnitId(null);
@@ -356,8 +376,8 @@ const AdminDashboard: React.FC = () => {
     setUnits([]);
     setLessons([]);
 
-    setError(null);
     setLoading(true);
+    setError(null);
 
     try {
       const loadedTerms =
@@ -365,15 +385,16 @@ const AdminDashboard: React.FC = () => {
           gradeId,
         );
 
-      if (!Array.isArray(loadedTerms)) {
-        throw new Error(
-          'Invalid terms response.',
-        );
-      }
+      setTerms(
+        Array.isArray(loadedTerms)
+          ? loadedTerms
+          : [],
+      );
 
-      setTerms(loadedTerms);
-
-      if (loadedTerms.length === 0) {
+      if (
+        !Array.isArray(loadedTerms) ||
+        loadedTerms.length === 0
+      ) {
         return;
       }
 
@@ -387,15 +408,16 @@ const AdminDashboard: React.FC = () => {
           termId,
         );
 
-      if (!Array.isArray(loadedSubjects)) {
-        throw new Error(
-          'Invalid subjects response.',
-        );
-      }
+      setSubjects(
+        Array.isArray(loadedSubjects)
+          ? loadedSubjects
+          : [],
+      );
 
-      setSubjects(loadedSubjects);
-
-      if (loadedSubjects.length === 0) {
+      if (
+        !Array.isArray(loadedSubjects) ||
+        loadedSubjects.length === 0
+      ) {
         return;
       }
 
@@ -411,15 +433,16 @@ const AdminDashboard: React.FC = () => {
           subjectId,
         );
 
-      if (!Array.isArray(loadedUnits)) {
-        throw new Error(
-          'Invalid units response.',
-        );
-      }
+      setUnits(
+        Array.isArray(loadedUnits)
+          ? loadedUnits
+          : [],
+      );
 
-      setUnits(loadedUnits);
-
-      if (loadedUnits.length === 0) {
+      if (
+        !Array.isArray(loadedUnits) ||
+        loadedUnits.length === 0
+      ) {
         return;
       }
 
@@ -433,48 +456,29 @@ const AdminDashboard: React.FC = () => {
           unitId,
         );
 
-      if (!Array.isArray(loadedLessons)) {
-        throw new Error(
-          'Invalid lessons response.',
-        );
-      }
-
-      setLessons(loadedLessons);
-
-      setConnection({
-        status: 'connected',
-        message:
-          'تم تحميل المنهج بنجاح.',
-      });
+      setLessons(
+        Array.isArray(loadedLessons)
+          ? loadedLessons
+          : [],
+      );
     } catch (err) {
       console.error(
-        'Failed to change grade:',
+        'Grade change failed:',
         err,
       );
 
       setError(
         'تعذر تحميل بيانات الصف المحدد.',
       );
-
-      setTerms([]);
-      setSubjects([]);
-      setUnits([]);
-      setLessons([]);
-
-      setSelectedTermId(null);
-      setSelectedSubjectId(null);
-      setSelectedUnitId(null);
     } finally {
       setLoading(false);
     }
   };
 
-
   const handleTermChange = async (
     termId: number,
   ) => {
     setSelectedTermId(termId);
-
     setSelectedSubjectId(null);
     setSelectedUnitId(null);
 
@@ -482,8 +486,8 @@ const AdminDashboard: React.FC = () => {
     setUnits([]);
     setLessons([]);
 
-    setError(null);
     setLoading(true);
+    setError(null);
 
     try {
       const loadedSubjects =
@@ -491,15 +495,16 @@ const AdminDashboard: React.FC = () => {
           termId,
         );
 
-      if (!Array.isArray(loadedSubjects)) {
-        throw new Error(
-          'Invalid subjects response.',
-        );
-      }
+      setSubjects(
+        Array.isArray(loadedSubjects)
+          ? loadedSubjects
+          : [],
+      );
 
-      setSubjects(loadedSubjects);
-
-      if (loadedSubjects.length === 0) {
+      if (
+        !Array.isArray(loadedSubjects) ||
+        loadedSubjects.length === 0
+      ) {
         return;
       }
 
@@ -515,15 +520,16 @@ const AdminDashboard: React.FC = () => {
           subjectId,
         );
 
-      if (!Array.isArray(loadedUnits)) {
-        throw new Error(
-          'Invalid units response.',
-        );
-      }
+      setUnits(
+        Array.isArray(loadedUnits)
+          ? loadedUnits
+          : [],
+      );
 
-      setUnits(loadedUnits);
-
-      if (loadedUnits.length === 0) {
+      if (
+        !Array.isArray(loadedUnits) ||
+        loadedUnits.length === 0
+      ) {
         return;
       }
 
@@ -537,34 +543,24 @@ const AdminDashboard: React.FC = () => {
           unitId,
         );
 
-      if (!Array.isArray(loadedLessons)) {
-        throw new Error(
-          'Invalid lessons response.',
-        );
-      }
-
-      setLessons(loadedLessons);
+      setLessons(
+        Array.isArray(loadedLessons)
+          ? loadedLessons
+          : [],
+      );
     } catch (err) {
       console.error(
-        'Failed to change term:',
+        'Term change failed:',
         err,
       );
 
       setError(
         'تعذر تحميل مواد الفصل المحدد.',
       );
-
-      setSubjects([]);
-      setUnits([]);
-      setLessons([]);
-
-      setSelectedSubjectId(null);
-      setSelectedUnitId(null);
     } finally {
       setLoading(false);
     }
   };
-
 
   const handleSubjectChange = async (
     subjectId: number,
@@ -577,8 +573,8 @@ const AdminDashboard: React.FC = () => {
     setUnits([]);
     setLessons([]);
 
-    setError(null);
     setLoading(true);
+    setError(null);
 
     try {
       const loadedUnits =
@@ -586,15 +582,16 @@ const AdminDashboard: React.FC = () => {
           subjectId,
         );
 
-      if (!Array.isArray(loadedUnits)) {
-        throw new Error(
-          'Invalid units response.',
-        );
-      }
+      setUnits(
+        Array.isArray(loadedUnits)
+          ? loadedUnits
+          : [],
+      );
 
-      setUnits(loadedUnits);
-
-      if (loadedUnits.length === 0) {
+      if (
+        !Array.isArray(loadedUnits) ||
+        loadedUnits.length === 0
+      ) {
         return;
       }
 
@@ -608,40 +605,33 @@ const AdminDashboard: React.FC = () => {
           unitId,
         );
 
-      if (!Array.isArray(loadedLessons)) {
-        throw new Error(
-          'Invalid lessons response.',
-        );
-      }
-
-      setLessons(loadedLessons);
+      setLessons(
+        Array.isArray(loadedLessons)
+          ? loadedLessons
+          : [],
+      );
     } catch (err) {
       console.error(
-        'Failed to change subject:',
+        'Subject change failed:',
         err,
       );
 
       setError(
         'تعذر تحميل وحدات المادة.',
       );
-
-      setUnits([]);
-      setLessons([]);
-      setSelectedUnitId(null);
     } finally {
       setLoading(false);
     }
   };
 
-
   const handleUnitChange = async (
     unitId: number,
   ) => {
     setSelectedUnitId(unitId);
-
     setLessons([]);
-    setError(null);
+
     setLoading(true);
+    setError(null);
 
     try {
       const loadedLessons =
@@ -649,647 +639,921 @@ const AdminDashboard: React.FC = () => {
           unitId,
         );
 
-      if (!Array.isArray(loadedLessons)) {
-        throw new Error(
-          'Invalid lessons response.',
-        );
-      }
-
-      setLessons(loadedLessons);
+      setLessons(
+        Array.isArray(loadedLessons)
+          ? loadedLessons
+          : [],
+      );
     } catch (err) {
       console.error(
-        'Failed to change unit:',
+        'Unit change failed:',
         err,
       );
 
       setError(
         'تعذر تحميل دروس الوحدة.',
       );
-
-      setLessons([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const connectionClass =
+    connection.status === 'connected'
+      ? 'border-emerald-500/30 bg-emerald-500/10'
+      : connection.status === 'error'
+        ? 'border-red-500/30 bg-red-500/10'
+        : 'border-amber-500/30 bg-amber-500/10';
 
-  const statusClasses = {
-    checking:
-      'border-amber-300 bg-amber-50 text-amber-800',
-    connected:
-      'border-emerald-300 bg-emerald-50 text-emerald-800',
-    error:
-      'border-red-300 bg-red-50 text-red-800',
-  };
-
-
-  const statusIcons = {
-    checking: '⏳',
-    connected: '✅',
-    error: '❌',
-  };
-
+  const connectionIcon =
+    connection.status === 'connected'
+      ? '✓'
+      : connection.status === 'error'
+        ? '!'
+        : '…';
 
   return (
     <main
-      className="min-h-screen bg-slate-950 text-slate-100 px-4 py-8 sm:px-6"
       dir="rtl"
+      className="min-h-screen bg-slate-950 text-slate-100"
     >
-      <div className="mx-auto max-w-7xl">
-
-        {/* Header */}
-
+      <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8">
         <header className="mb-8">
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-
-              <div>
-                <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-black text-amber-400">
-                  🎓 The Tutor Studio
-                </span>
-
-                <h1 className="mt-3 text-3xl font-black text-amber-400 sm:text-4xl">
-                  استوديو المنهج
-                </h1>
-
-                <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-400">
-                  استعراض هيكل المنهج الحقيقي من قاعدة البيانات:
-                  الصف ← الفصل الدراسي ← المادة ← الوحدة ← الدرس.
-                </p>
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-black text-amber-400">
+                🛡️ Super Admin
               </div>
 
-              <button
-                type="button"
-                onClick={loadInitialCurriculum}
-                disabled={loading}
-                className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loading
-                  ? 'جاري التحميل...'
-                  : '🔄 تحديث المنهج'}
-              </button>
+              <h1 className="mt-3 text-3xl md:text-4xl font-black text-white">
+                لوحة إدارة The Tutor
+              </h1>
 
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-400">
+                مركز التحكم الرئيسي لإدارة المحتوى
+                والمشتركين ومتابعة حالة المنصة.
+              </p>
             </div>
 
-
-            <div
-              className={`mt-5 rounded-2xl border p-4 ${statusClasses[connection.status]}`}
+            <Link
+              to="/"
+              className="inline-flex items-center justify-center rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-bold text-slate-300 transition hover:border-amber-500/50 hover:text-amber-400"
             >
-              <div className="flex items-center justify-between gap-4">
-
-                <div>
-                  <p className="text-xs font-black">
-                    حالة النظام
-                  </p>
-
-                  <p className="mt-1 text-sm font-bold">
-                    {connection.message}
-                  </p>
-                </div>
-
-                <span className="text-2xl">
-                  {statusIcons[connection.status]}
-                </span>
-
-              </div>
-            </div>
-
+              العودة للرئيسية
+            </Link>
           </div>
         </header>
 
+        <nav className="mb-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <button
+            type="button"
+            onClick={() =>
+              setSection('overview')
+            }
+            className={`rounded-2xl border p-4 text-right transition ${
+              section === 'overview'
+                ? 'border-amber-500 bg-amber-500/10'
+                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+            }`}
+          >
+            <div className="text-xl">
+              📊
+            </div>
 
-        {/* Error */}
+            <div className="mt-2 font-black">
+              نظرة عامة
+            </div>
+
+            <div className="mt-1 text-xs text-slate-500">
+              حالة المنصة
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setSection('content')
+            }
+            className={`rounded-2xl border p-4 text-right transition ${
+              section === 'content'
+                ? 'border-amber-500 bg-amber-500/10'
+                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+            }`}
+          >
+            <div className="text-xl">
+              📚
+            </div>
+
+            <div className="mt-2 font-black">
+              إدارة المحتوى
+            </div>
+
+            <div className="mt-1 text-xs text-slate-500">
+              المناهج والدروس
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setSection('subscribers')
+            }
+            className={`rounded-2xl border p-4 text-right transition ${
+              section === 'subscribers'
+                ? 'border-amber-500 bg-amber-500/10'
+                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+            }`}
+          >
+            <div className="text-xl">
+              👥
+            </div>
+
+            <div className="mt-2 font-black">
+              إدارة المشتركين
+            </div>
+
+            <div className="mt-1 text-xs text-slate-500">
+              الطلاب وأولياء الأمور
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setSection('server')
+            }
+            className={`rounded-2xl border p-4 text-right transition ${
+              section === 'server'
+                ? 'border-amber-500 bg-amber-500/10'
+                : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+            }`}
+          >
+            <div className="text-xl">
+              🖥️
+            </div>
+
+            <div className="mt-2 font-black">
+              إدارة المنصة
+            </div>
+
+            <div className="mt-1 text-xs text-slate-500">
+              الاتصال وحالة السيرفر
+            </div>
+          </button>
+        </nav>
 
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-900/60 bg-red-950/40 p-5">
-            <p className="text-sm font-bold text-red-300">
-              {error}
-            </p>
+          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+            {error}
           </div>
         )}
 
-
-        {/* Statistics */}
-
-        <section className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 text-center shadow-lg">
-            <p className="text-3xl font-black text-amber-400">
-              {grades.length}
-            </p>
-
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              الصفوف
-            </p>
-          </div>
-
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 text-center shadow-lg">
-            <p className="text-3xl font-black text-indigo-400">
-              {terms.length}
-            </p>
-
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              الفصول
-            </p>
-          </div>
-
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 text-center shadow-lg">
-            <p className="text-3xl font-black text-emerald-400">
-              {subjects.length}
-            </p>
-
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              المواد
-            </p>
-          </div>
-
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 text-center shadow-lg">
-            <p className="text-3xl font-black text-cyan-400">
-              {units.length}
-            </p>
-
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              الوحدات
-            </p>
-          </div>
-
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 text-center shadow-lg">
-            <p className="text-3xl font-black text-violet-400">
-              {lessons.length}
-            </p>
-
-            <p className="mt-1 text-xs font-bold text-slate-400">
-              الدروس
-            </p>
-          </div>
-
-        </section>
-
-
-        {/* Curriculum Selection */}
-
-        <section className="mb-8 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-
-          <div className="mb-6">
-            <h2 className="text-2xl font-black text-slate-100">
-              📚 بنية المنهج
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              الاختيارات التالية مرتبطة مباشرة بالـAPI الحالي
-              وبالعلاقات الموجودة في قاعدة البيانات.
-            </p>
-          </div>
-
-
-          <div className="grid gap-5 lg:grid-cols-2">
-
-            {/* Grade */}
-
-            <div>
-              <label
-                htmlFor="studio-grade"
-                className="mb-2 block text-sm font-black text-slate-300"
-              >
-                الصف الدراسي
-              </label>
-
-              <select
-                id="studio-grade"
-                value={selectedGradeId ?? ''}
-                disabled={
-                  loading ||
-                  grades.length === 0
-                }
-                onChange={(event) => {
-                  const value =
-                    Number(
-                      event.target.value,
-                    );
-
-                  if (
-                    Number.isInteger(value) &&
-                    value > 0
-                  ) {
-                    handleGradeChange(value);
-                  }
-                }}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-bold text-slate-100 outline-none transition focus:border-amber-500"
-              >
-                <option value="">
-                  اختر الصف
-                </option>
-
-                {grades.map((grade) => (
-                  <option
-                    key={grade.id}
-                    value={grade.id}
-                  >
-                    {grade.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-
-            {/* Term */}
-
-            <div>
-              <label
-                htmlFor="studio-term"
-                className="mb-2 block text-sm font-black text-slate-300"
-              >
-                الفصل الدراسي
-              </label>
-
-              <select
-                id="studio-term"
-                value={selectedTermId ?? ''}
-                disabled={
-                  loading ||
-                  terms.length === 0
-                }
-                onChange={(event) => {
-                  const value =
-                    Number(
-                      event.target.value,
-                    );
-
-                  if (
-                    Number.isInteger(value) &&
-                    value > 0
-                  ) {
-                    handleTermChange(value);
-                  }
-                }}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-bold text-slate-100 outline-none transition focus:border-indigo-500"
-              >
-                <option value="">
-                  اختر الفصل
-                </option>
-
-                {terms.map((term) => (
-                  <option
-                    key={term.id}
-                    value={term.id}
-                  >
-                    {term.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-
-            {/* Subject */}
-
-            <div>
-              <label
-                htmlFor="studio-subject"
-                className="mb-2 block text-sm font-black text-slate-300"
-              >
-                المادة
-              </label>
-
-              <select
-                id="studio-subject"
-                value={selectedSubjectId ?? ''}
-                disabled={
-                  loading ||
-                  subjects.length === 0
-                }
-                onChange={(event) => {
-                  const value =
-                    Number(
-                      event.target.value,
-                    );
-
-                  if (
-                    Number.isInteger(value) &&
-                    value > 0
-                  ) {
-                    handleSubjectChange(value);
-                  }
-                }}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-bold text-slate-100 outline-none transition focus:border-emerald-500"
-              >
-                <option value="">
-                  اختر المادة
-                </option>
-
-                {subjects.map((subject) => (
-                  <option
-                    key={subject.id}
-                    value={subject.id}
-                  >
-                    {subject.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-
-            {/* Unit */}
-
-            <div>
-              <label
-                htmlFor="studio-unit"
-                className="mb-2 block text-sm font-black text-slate-300"
-              >
-                الوحدة
-              </label>
-
-              <select
-                id="studio-unit"
-                value={selectedUnitId ?? ''}
-                disabled={
-                  loading ||
-                  units.length === 0
-                }
-                onChange={(event) => {
-                  const value =
-                    Number(
-                      event.target.value,
-                    );
-
-                  if (
-                    Number.isInteger(value) &&
-                    value > 0
-                  ) {
-                    handleUnitChange(value);
-                  }
-                }}
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-bold text-slate-100 outline-none transition focus:border-cyan-500"
-              >
-                <option value="">
-                  اختر الوحدة
-                </option>
-
-                {units.map((unit) => (
-                  <option
-                    key={unit.id}
-                    value={unit.id}
-                  >
-                    {unit.unit_number}. {unit.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-          </div>
-
-        </section>
-
-
-        {/* Current Selection */}
-
-        <section className="mb-8 rounded-3xl border border-amber-500/20 bg-amber-500/5 p-6">
-
-          <h2 className="text-lg font-black text-amber-400">
-            المسار الحالي
-          </h2>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm font-bold">
-
-            <span className="rounded-lg bg-slate-900 px-3 py-2 text-slate-300">
-              {selectedGrade?.title ?? '—'}
-            </span>
-
-            <span className="text-amber-500">
-              ←
-            </span>
-
-            <span className="rounded-lg bg-slate-900 px-3 py-2 text-slate-300">
-              {selectedTerm?.title ?? '—'}
-            </span>
-
-            <span className="text-amber-500">
-              ←
-            </span>
-
-            <span className="rounded-lg bg-slate-900 px-3 py-2 text-slate-300">
-              {selectedSubject?.title ?? '—'}
-            </span>
-
-            <span className="text-amber-500">
-              ←
-            </span>
-
-            <span className="rounded-lg bg-slate-900 px-3 py-2 text-slate-300">
-              {selectedUnit?.title ?? '—'}
-            </span>
-
-          </div>
-
-        </section>
-
-
-        {/* Units */}
-
-        <section className="mb-8 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-
-          <div className="mb-5 flex items-center justify-between gap-4">
-
-            <div>
-              <h2 className="text-xl font-black text-slate-100">
-                📦 وحدات المادة
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                اختر وحدة لاستعراض الدروس التابعة لها.
-              </p>
-            </div>
-
-            <span className="rounded-lg bg-cyan-500/10 px-3 py-1.5 text-xs font-black text-cyan-400">
-              {units.length} وحدة
-            </span>
-
-          </div>
-
-
-          {units.length === 0 ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-8 text-center">
-              <p className="text-sm font-bold text-slate-500">
-                لا توجد وحدات متاحة لهذه المادة.
-              </p>
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-
-              {units.map((unit) => {
-                const active =
-                  unit.id === selectedUnitId;
-
-                return (
-                  <button
-                    key={unit.id}
-                    type="button"
-                    onClick={() =>
-                      handleUnitChange(
-                        unit.id,
-                      )
-                    }
-                    className={`rounded-2xl border p-5 text-right transition ${
-                      active
-                        ? 'border-cyan-500 bg-cyan-500/10'
-                        : 'border-slate-800 bg-slate-950 hover:border-cyan-500/50'
-                    }`}
-                  >
-
-                    <div className="flex items-start gap-3">
-
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-500 font-black text-slate-950">
-                        {unit.unit_number}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-
-                        <h3 className="font-black text-slate-100">
-                          {unit.title}
-                        </h3>
-
-                        {unit.description && (
-                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-500">
-                            {unit.description}
-                          </p>
-                        )}
-
-                      </div>
-
-                    </div>
-
-                  </button>
-                );
-              })}
-
-            </div>
-          )}
-
-        </section>
-
-
-        {/* Lessons */}
-
-        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-
-          <div className="mb-5 flex items-center justify-between gap-4">
-
-            <div>
-              <h2 className="text-xl font-black text-slate-100">
-                📖 دروس الوحدة
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                الدروس المعروضة هنا هي البيانات الحقيقية
-                المرتبطة بالوحدة المحددة في قاعدة البيانات.
-              </p>
-            </div>
-
-            <span className="rounded-lg bg-violet-500/10 px-3 py-1.5 text-xs font-black text-violet-400">
-              {lessons.length} درس
-            </span>
-
-          </div>
-
-
-          {loading ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-10 text-center">
-              <p className="animate-pulse text-sm font-bold text-amber-400">
-                جاري تحميل الدروس...
-              </p>
-            </div>
-          ) : lessons.length === 0 ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-10 text-center">
-              <p className="text-sm font-bold text-slate-500">
-                لا توجد دروس متاحة لهذه الوحدة.
-              </p>
-            </div>
-          ) : (
-            <div className="grid gap-4">
-
-              {lessons.map((lesson) => (
-                <Link
-                  key={lesson.id}
-                  to={`/lesson/${lesson.id}`}
-                  className="group block rounded-2xl border border-slate-800 bg-slate-950 p-5 transition hover:border-violet-500/50 hover:bg-violet-500/5"
-                >
-
-                  <div className="flex items-start gap-4">
-
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500 font-black text-slate-950">
-                      {lesson.lesson_number}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-
-                        <h3 className="text-lg font-black text-slate-100 group-hover:text-violet-300">
-                          {lesson.title}
-                        </h3>
-
-                        <span className="text-xs font-bold text-violet-400">
-                          درس #{lesson.lesson_number}
-                        </span>
-
-                      </div>
-
-                      {lesson.content_summary && (
-                        <p className="mt-2 text-sm leading-6 text-slate-400">
-                          {lesson.content_summary}
-                        </p>
-                      )}
-
-                      <div className="mt-4 flex flex-wrap gap-2">
-
-                        {lesson.video_url && (
-                          <span className="rounded-lg bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-400">
-                            🎬 فيديو
-                          </span>
-                        )}
-
-                        {lesson.infographic_url && (
-                          <span className="rounded-lg bg-blue-500/10 px-2.5 py-1 text-xs font-bold text-blue-400">
-                            🖼️ إنفوجراف
-                          </span>
-                        )}
-
-                        {lesson.game_url && (
-                          <span className="rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-400">
-                            🎮 لعبة
-                          </span>
-                        )}
-
-                        <span className="rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-500">
-                          ID: {lesson.id}
-                        </span>
-
-                      </div>
-
-                    </div>
-
-                    <span className="shrink-0 text-xl text-slate-600 transition group-hover:text-violet-400">
-                      ←
-                    </span>
-
+        {section === 'overview' && (
+          <section className="space-y-6">
+            <div
+              className={`rounded-2xl border p-5 ${connectionClass}`}
+            >
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-950/50 text-xl font-black">
+                    {connectionIcon}
                   </div>
 
-                </Link>
-              ))}
+                  <div>
+                    <h2 className="font-black">
+                      اتصال الـBackend
+                    </h2>
 
+                    <p className="mt-1 text-sm text-slate-400">
+                      {connection.message}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={testServerConnection}
+                  disabled={
+                    connection.status ===
+                    'checking'
+                  }
+                  className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {connection.status ===
+                  'checking'
+                    ? 'جاري الاختبار...'
+                    : 'اختبار الاتصال'}
+                </button>
+              </div>
+
+              {lastCheckedAt && (
+                <p className="mt-4 text-xs text-slate-500">
+                  آخر اختبار: {lastCheckedAt}
+                </p>
+              )}
             </div>
-          )}
 
-        </section>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="text-2xl">
+                  🎓
+                </div>
 
+                <p className="mt-3 text-xs text-slate-500">
+                  الصفوف الدراسية
+                </p>
+
+                <p className="mt-1 text-3xl font-black text-amber-400">
+                  {grades.length}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="text-2xl">
+                  📖
+                </div>
+
+                <p className="mt-3 text-xs text-slate-500">
+                  الفصول
+                </p>
+
+                <p className="mt-1 text-3xl font-black text-amber-400">
+                  {terms.length}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="text-2xl">
+                  📚
+                </div>
+
+                <p className="mt-3 text-xs text-slate-500">
+                  المواد الحالية
+                </p>
+
+                <p className="mt-1 text-3xl font-black text-amber-400">
+                  {subjects.length}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="text-2xl">
+                  📝
+                </div>
+
+                <p className="mt-3 text-xs text-slate-500">
+                  دروس الوحدة الحالية
+                </p>
+
+                <p className="mt-1 text-3xl font-black text-amber-400">
+                  {lessons.length}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <h2 className="text-xl font-black">
+                حالة المنصة
+              </h2>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-xs text-slate-500">
+                    قاعدة البيانات
+                  </p>
+
+                  <p className="mt-2 font-black text-emerald-400">
+                    متصلة عبر الـBackend
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-xs text-slate-500">
+                    طبقة الـAPI
+                  </p>
+
+                  <p
+                    className={`mt-2 font-black ${
+                      connection.status ===
+                      'connected'
+                        ? 'text-emerald-400'
+                        : connection.status ===
+                            'error'
+                          ? 'text-red-400'
+                          : 'text-amber-400'
+                    }`}
+                  >
+                    {connection.status ===
+                    'connected'
+                      ? 'تعمل'
+                      : connection.status ===
+                          'error'
+                        ? 'خطأ'
+                        : 'جاري الفحص'}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-xs text-slate-500">
+                    إدارة المحتوى
+                  </p>
+
+                  <p className="mt-2 font-black text-amber-400">
+                    جاهزة للتطوير
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {section === 'content' && (
+          <section className="space-y-6">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-black">
+                    إدارة المحتوى
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    اختر مستوى المنهج للوصول إلى
+                    المواد والوحدات والدروس.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={loadCurriculum}
+                  disabled={loading}
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-bold hover:border-amber-500/50 disabled:opacity-50"
+                >
+                  {loading
+                    ? 'جاري التحديث...'
+                    : 'تحديث المنهج'}
+                </button>
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold text-slate-500">
+                    الصف الدراسي
+                  </span>
+
+                  <select
+                    value={
+                      selectedGradeId ?? ''
+                    }
+                    onChange={(event) =>
+                      handleGradeChange(
+                        Number(
+                          event.target.value,
+                        ),
+                      )
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-amber-500"
+                  >
+                    {grades.map((grade) => (
+                      <option
+                        key={grade.id}
+                        value={grade.id}
+                      >
+                        {grade.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold text-slate-500">
+                    الفصل الدراسي
+                  </span>
+
+                  <select
+                    value={
+                      selectedTermId ?? ''
+                    }
+                    onChange={(event) =>
+                      handleTermChange(
+                        Number(
+                          event.target.value,
+                        ),
+                      )
+                    }
+                    disabled={
+                      terms.length === 0
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-amber-500 disabled:opacity-50"
+                  >
+                    {terms.map((term) => (
+                      <option
+                        key={term.id}
+                        value={term.id}
+                      >
+                        {term.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold text-slate-500">
+                    المادة
+                  </span>
+
+                  <select
+                    value={
+                      selectedSubjectId ??
+                      ''
+                    }
+                    onChange={(event) =>
+                      handleSubjectChange(
+                        Number(
+                          event.target.value,
+                        ),
+                      )
+                    }
+                    disabled={
+                      subjects.length === 0
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-amber-500 disabled:opacity-50"
+                  >
+                    {subjects.map(
+                      (subject) => (
+                        <option
+                          key={subject.id}
+                          value={subject.id}
+                        >
+                          {subject.title}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-xs font-bold text-slate-500">
+                    الوحدة
+                  </span>
+
+                  <select
+                    value={
+                      selectedUnitId ?? ''
+                    }
+                    onChange={(event) =>
+                      handleUnitChange(
+                        Number(
+                          event.target.value,
+                        ),
+                      )
+                    }
+                    disabled={
+                      units.length === 0
+                    }
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-amber-500 disabled:opacity-50"
+                  >
+                    {units.map((unit) => (
+                      <option
+                        key={unit.id}
+                        value={unit.id}
+                      >
+                        {unit.unit_number}.{' '}
+                        {unit.title}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <div className="mb-5">
+                <h3 className="text-xl font-black">
+                  المسار الحالي
+                </h3>
+
+                <p className="mt-2 text-sm text-slate-400">
+                  {selectedGrade?.title ??
+                    '—'}
+                  {' / '}
+                  {selectedTerm?.title ??
+                    '—'}
+                  {' / '}
+                  {selectedSubject?.title ??
+                    '—'}
+                  {' / '}
+                  {selectedUnit?.title ??
+                    '—'}
+                </p>
+              </div>
+
+              {lessons.length === 0 ? (
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-8 text-center">
+                  <p className="text-slate-400">
+                    لا توجد دروس متاحة في
+                    الوحدة الحالية.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {lessons.map(
+                    (lesson) => (
+                      <Link
+                        key={lesson.id}
+                        to={`/lesson/${lesson.id}`}
+                        className="group rounded-xl border border-slate-800 bg-slate-950 p-4 transition hover:border-amber-500/50"
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 font-black text-slate-950">
+                            {
+                              lesson.lesson_number
+                            }
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-black text-slate-100 group-hover:text-amber-400">
+                              {lesson.title}
+                            </h4>
+
+                            {lesson.content_summary && (
+                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                                {
+                                  lesson.content_summary
+                                }
+                              </p>
+                            )}
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {lesson.video_url && (
+                                <span className="rounded-full bg-sky-500/10 px-2 py-1 text-[11px] font-bold text-sky-400">
+                                  🎥 فيديو
+                                </span>
+                              )}
+
+                              {lesson.infographic_url && (
+                                <span className="rounded-full bg-violet-500/10 px-2 py-1 text-[11px] font-bold text-violet-400">
+                                  🖼️ إنفوجرافيك
+                                </span>
+                              )}
+
+                              {lesson.game_url && (
+                                <span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[11px] font-bold text-emerald-400">
+                                  🎮 لعبة
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <span className="text-amber-400">
+                            ◀
+                          </span>
+                        </div>
+                      </Link>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="text-2xl">
+                  📝
+                </div>
+
+                <h3 className="mt-3 font-black">
+                  إدارة الدروس
+                </h3>
+
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  افتح الدرس لمراجعة محتواه
+                  وموارده من خلال صفحات الدرس
+                  الحالية.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="text-2xl">
+                  🖼️
+                </div>
+
+                <h3 className="mt-3 font-black">
+                  الإنفوجرافيك والـAssets
+                </h3>
+
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  الـDatabase تدعم
+                  lesson_assets وcontent blocks.
+                  واجهة الإدارة التفصيلية ستُربط
+                  بها في مرحلة إدارة المحتوى.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="text-2xl">
+                  🎮
+                </div>
+
+                <h3 className="mt-3 font-black">
+                  الألعاب
+                </h3>
+
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  نظام الألعاب يعتمد على
+                  game_templates و
+                  game_definitions والأسئلة
+                  المرتبطة بها.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                <div className="text-2xl">
+                  ❓
+                </div>
+
+                <h3 className="mt-3 font-black">
+                  الأسئلة
+                </h3>
+
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  بنك الأسئلة مستقل ويرتبط
+                  بالدروس والألعاب والتحديات.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {section === 'subscribers' && (
+          <section className="space-y-6">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-2xl">
+                  👥
+                </div>
+
+                <div>
+                  <h2 className="text-2xl font-black">
+                    إدارة المشتركين
+                  </h2>
+
+                  <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-400">
+                    هذا القسم مخصص لإدارة الطلاب
+                    وأولياء الأمور والاشتراكات
+                    والعلاقات بينهم.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+                <div className="text-2xl">
+                  🎓
+                </div>
+
+                <h3 className="mt-4 font-black">
+                  الطلاب
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  إضافة وإدارة حسابات الطلاب
+                  وإيقاف أو إعادة تفعيل الحسابات.
+                </p>
+
+                <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-300">
+                  واجهة الإدارة جاهزة معماريًا،
+                  لكن Endpoint الإدارة الإدارية
+                  للطلاب غير موجود في الـAPI الحالي
+                  بعد.
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+                <div className="text-2xl">
+                  👨‍👩‍👧
+                </div>
+
+                <h3 className="mt-4 font-black">
+                  أولياء الأمور
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  إنشاء وإدارة أولياء الأمور
+                  وربطهم بالطلاب.
+                </p>
+
+                <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-300">
+                  نظام parent invitations و
+                  parent_students موجود في
+                  الـBackend والـDatabase.
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+                <div className="text-2xl">
+                  💳
+                </div>
+
+                <h3 className="mt-4 font-black">
+                  الاشتراكات
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  متابعة الخطط وحالة الاشتراكات
+                  والتواريخ ومزود الدفع.
+                </p>
+
+                <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-300">
+                  جداول plans وsubscriptions
+                  موجودة في قاعدة البيانات، لكن
+                  Admin API الخاص بها يحتاج
+                  Endpoint مخصص.
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950 p-6">
+              <h3 className="font-black">
+                ملاحظة تنفيذية
+              </h3>
+
+              <p className="mt-3 text-sm leading-7 text-slate-400">
+                لن تقوم هذه الصفحة باستدعاء جداول
+                profiles أو subscriptions مباشرة من
+                المتصفح، ولن نضع service-role key
+                في الـFrontend. إدارة هذه البيانات
+                يجب أن تمر عبر Admin API محمي في
+                الـBackend.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {section === 'server' && (
+          <section className="space-y-6">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-bold text-sky-400">
+                    🖥️ Platform Health
+                  </div>
+
+                  <h2 className="mt-3 text-2xl font-black">
+                    إدارة المنصة والسيرفر
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-7 text-slate-400">
+                    اختبارات الاتصال الأساسية التي
+                    يمكن تنفيذها الآن من خلال الـAPI.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={testServerConnection}
+                  disabled={
+                    connection.status ===
+                    'checking'
+                  }
+                  className="rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+                >
+                  {connection.status ===
+                  'checking'
+                    ? 'جاري الاختبار...'
+                    : 'تشغيل اختبار الاتصال'}
+                </button>
+              </div>
+            </div>
+
+            <div
+              className={`rounded-2xl border p-6 ${connectionClass}`}
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950/50 text-2xl font-black">
+                  {connectionIcon}
+                </div>
+
+                <div>
+                  <h3 className="font-black">
+                    Backend Health Check
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-400">
+                    {connection.message}
+                  </p>
+
+                  {lastCheckedAt && (
+                    <p className="mt-2 text-xs text-slate-500">
+                      آخر فحص: {lastCheckedAt}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+                <div className="text-2xl">
+                  🔌
+                </div>
+
+                <h3 className="mt-4 font-black">
+                  Backend
+                </h3>
+
+                <p className="mt-2 text-sm text-slate-500">
+                  FastAPI
+                </p>
+
+                <p
+                  className={`mt-3 font-black ${
+                    connection.status ===
+                    'connected'
+                      ? 'text-emerald-400'
+                      : connection.status ===
+                          'error'
+                        ? 'text-red-400'
+                        : 'text-amber-400'
+                  }`}
+                >
+                  {connection.status ===
+                  'connected'
+                    ? 'Online'
+                    : connection.status ===
+                        'error'
+                      ? 'Error'
+                      : 'Checking'}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+                <div className="text-2xl">
+                  🗄️
+                </div>
+
+                <h3 className="mt-4 font-black">
+                  Supabase
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  يتم التحقق منه حاليًا عبر
+                  Backend health/API connection.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+                <div className="text-2xl">
+                  📈
+                </div>
+
+                <h3 className="mt-4 font-black">
+                  Performance Monitoring
+                </h3>
+
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  CPU وRAM وLatency وError Rate
+                  وغيرها تُفعّل في مرحلة
+                  deployment على VPS/Cloud.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
+              <h3 className="text-xl font-black">
+                حدود المرحلة الحالية
+              </h3>
+
+              <ul className="mt-4 space-y-3 text-sm leading-7 text-slate-400">
+                <li>
+                  ✓ اختبار Backend Health متاح.
+                </li>
+
+                <li>
+                  ✓ اتصال الـBackend بقاعدة البيانات
+                  يتم من خلال FastAPI.
+                </li>
+
+                <li>
+                  ✓ لا يتم كشف service-role key
+                  للـFrontend.
+                </li>
+
+                <li>
+                  ⏳ مؤشرات أداء السيرفر التفصيلية
+                  تُضاف مع بيئة الـdeployment.
+                </li>
+              </ul>
+            </div>
+          </section>
+        )}
+
+        <footer className="mt-10 border-t border-slate-800 pt-5 text-center text-xs text-slate-600">
+          The Tutor — Super Admin Control Center
+        </footer>
       </div>
     </main>
   );
 };
-
 
 export default AdminDashboard;
