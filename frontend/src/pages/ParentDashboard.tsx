@@ -7,6 +7,7 @@ import React, {
 import { apiClient } from '../api/apiClient';
 import { supabase } from '../lib/supabase';
 
+
 interface ParentDashboardStudent {
   parent_profile_id: string;
   student_profile_id: string;
@@ -21,25 +22,29 @@ interface ParentDashboardStudent {
   accuracy_percent: number;
 }
 
-interface GradeInfo {
-  id: number;
-  title: string;
-  level_code?: number | null;
-  code?: string | null;
-}
 
 interface DashboardStudent
   extends ParentDashboardStudent {
   grade_title: string;
 }
 
+
 const formatNumber = (
   value: number | null | undefined,
 ): string => {
+  const numericValue = Number(
+    value ?? 0,
+  );
+
+  if (!Number.isFinite(numericValue)) {
+    return '0';
+  }
+
   return new Intl.NumberFormat(
     'ar-EG',
-  ).format(value ?? 0);
+  ).format(numericValue);
 };
+
 
 const formatPercent = (
   value: number | null | undefined,
@@ -48,28 +53,188 @@ const formatPercent = (
     value ?? 0,
   );
 
-  if (!Number.isFinite(numericValue)) {
+  if (
+    !Number.isFinite(numericValue)
+  ) {
     return '0%';
   }
 
   return `${Math.round(numericValue)}%`;
 };
 
-const getInitials = (
-  student: DashboardStudent,
-): string => {
-  if (student.grade_title) {
-    const cleaned = student.grade_title
-      .trim()
-      .replace(/\s+/g, ' ');
 
-    if (cleaned.length > 0) {
-      return cleaned.charAt(0);
-    }
+const normalizeStudent = (
+  value: unknown,
+): ParentDashboardStudent | null => {
+  if (
+    !value ||
+    typeof value !== 'object'
+  ) {
+    return null;
   }
 
-  return 'ط';
+  const item =
+    value as Record<
+      string,
+      unknown
+    >;
+
+  const studentProfileId =
+    typeof item.student_profile_id ===
+    'string'
+      ? item.student_profile_id
+      : null;
+
+  const parentProfileId =
+    typeof item.parent_profile_id ===
+    'string'
+      ? item.parent_profile_id
+      : null;
+
+  if (
+    !studentProfileId ||
+    !parentProfileId
+  ) {
+    return null;
+  }
+
+  const gradeId =
+    typeof item.grade_id ===
+      'number' &&
+    Number.isInteger(
+      item.grade_id,
+    )
+      ? item.grade_id
+      : null;
+
+  const xp =
+    typeof item.xp === 'number' &&
+    Number.isFinite(item.xp)
+      ? item.xp
+      : Number(item.xp ?? 0);
+
+  const level =
+    typeof item.level === 'number' &&
+    Number.isFinite(item.level)
+      ? item.level
+      : Number(item.level ?? 1);
+
+  const completedLessons =
+    typeof item.completed_lessons ===
+      'number' &&
+    Number.isFinite(
+      item.completed_lessons,
+    )
+      ? item.completed_lessons
+      : Number(
+          item.completed_lessons ?? 0,
+        );
+
+  const gamesPlayed =
+    typeof item.games_played ===
+      'number' &&
+    Number.isFinite(
+      item.games_played,
+    )
+      ? item.games_played
+      : Number(
+          item.games_played ?? 0,
+        );
+
+  const questionsAnswered =
+    typeof item.questions_answered ===
+      'number' &&
+    Number.isFinite(
+      item.questions_answered,
+    )
+      ? item.questions_answered
+      : Number(
+          item.questions_answered ?? 0,
+        );
+
+  const correctAnswers =
+    typeof item.correct_answers ===
+      'number' &&
+    Number.isFinite(
+      item.correct_answers,
+    )
+      ? item.correct_answers
+      : Number(
+          item.correct_answers ?? 0,
+        );
+
+  const accuracyPercent =
+    typeof item.accuracy_percent ===
+      'number' &&
+    Number.isFinite(
+      item.accuracy_percent,
+    )
+      ? item.accuracy_percent
+      : Number(
+          item.accuracy_percent ?? 0,
+        );
+
+  return {
+    parent_profile_id:
+      parentProfileId,
+
+    student_profile_id:
+      studentProfileId,
+
+    grade_id:
+      gradeId,
+
+    xp:
+      Number.isFinite(xp)
+        ? xp
+        : 0,
+
+    level:
+      Number.isFinite(level) &&
+      level >= 1
+        ? level
+        : 1,
+
+    is_active:
+      item.is_active === true,
+
+    completed_lessons:
+      Number.isFinite(
+        completedLessons,
+      )
+        ? completedLessons
+        : 0,
+
+    games_played:
+      Number.isFinite(
+        gamesPlayed,
+      )
+        ? gamesPlayed
+        : 0,
+
+    questions_answered:
+      Number.isFinite(
+        questionsAnswered,
+      )
+        ? questionsAnswered
+        : 0,
+
+    correct_answers:
+      Number.isFinite(
+        correctAnswers,
+      )
+        ? correctAnswers
+        : 0,
+
+    accuracy_percent:
+      Number.isFinite(
+        accuracyPercent,
+      )
+        ? accuracyPercent
+        : 0,
+  };
 };
+
 
 const getAccuracyLabel = (
   accuracy: number,
@@ -93,271 +258,355 @@ const getAccuracyLabel = (
   return 'لا توجد بيانات بعد';
 };
 
-const ParentDashboard: React.FC = () => {
-  const [students, setStudents] = useState<
-    DashboardStudent[]
-  >([]);
 
-  const [selectedStudentId, setSelectedStudentId] =
-    useState<string | null>(null);
+const ParentDashboard: React.FC = () => {
+  const [students, setStudents] =
+    useState<DashboardStudent[]>(
+      [],
+    );
+
+  const [
+    selectedStudentId,
+    setSelectedStudentId,
+  ] = useState<string | null>(
+    null,
+  );
 
   const [loading, setLoading] =
     useState(true);
 
   const [error, setError] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null,
+    );
 
   const [parentName, setParentName] =
-    useState<string | null>(null);
+    useState<string | null>(
+      null,
+    );
 
-  const selectedStudent = useMemo(
-    () =>
-      students.find(
-        (student) =>
-          student.student_profile_id ===
-          selectedStudentId,
-      ) ?? null,
-    [students, selectedStudentId],
-  );
+
+  const selectedStudent =
+    useMemo(
+      () =>
+        students.find(
+          (student) =>
+            student.student_profile_id ===
+            selectedStudentId,
+        ) ?? null,
+      [
+        students,
+        selectedStudentId,
+      ],
+    );
+
 
   useEffect(() => {
     let active = true;
 
-    const loadDashboard = async () => {
-      setLoading(true);
-      setError(null);
 
-      try {
-        const {
-          data: {
-            session,
-          },
-        } = await supabase.auth.getSession();
+    const loadDashboard =
+      async () => {
+        setLoading(true);
+        setError(null);
 
-        if (!session?.access_token) {
-          throw new Error(
-            'يجب تسجيل الدخول أولًا.',
-          );
-        }
 
-        const accessToken =
-          session.access_token;
+        try {
+          const {
+            data: {
+              session,
+            },
+          } =
+            await supabase.auth.getSession();
 
-        const {
-          data: {
-            user,
-          },
-        } = await supabase.auth.getUser();
 
-        if (!user?.id) {
-          throw new Error(
-            'تعذر تحديد حساب ولي الأمر.',
-          );
-        }
+          if (
+            !session?.access_token
+          ) {
+            throw new Error(
+              'يجب تسجيل الدخول أولًا.',
+            );
+          }
 
-        const metadata =
-          user.user_metadata ?? {};
 
-        const metadataName =
-          typeof metadata.name === 'string'
-            ? metadata.name
-            : typeof metadata.full_name ===
-                'string'
-              ? metadata.full_name
-              : null;
+          const accessToken =
+            session.access_token;
 
-        if (active) {
-          setParentName(
-            metadataName,
-          );
-        }
 
-        const parentStudents =
-          await apiClient.getParentStudents(
-            user.id,
-            accessToken,
-          );
+          const {
+            data: {
+              user,
+            },
+          } =
+            await supabase.auth.getUser();
 
-        if (!active) {
-          return;
-        }
 
-        if (
-          !Array.isArray(
-            parentStudents,
-          )
-        ) {
-          setStudents([]);
-          setSelectedStudentId(null);
-          return;
-        }
+          if (!user?.id) {
+            throw new Error(
+              'تعذر تحديد حساب ولي الأمر.',
+            );
+          }
 
-        const gradeIds = Array.from(
-          new Set(
-            parentStudents
+
+          const metadata =
+            user.user_metadata ?? {};
+
+
+          const metadataName =
+            typeof metadata.name ===
+            'string'
+              ? metadata.name
+              : typeof metadata.full_name ===
+                  'string'
+                ? metadata.full_name
+                : null;
+
+
+          if (active) {
+            setParentName(
+              metadataName,
+            );
+          }
+
+
+          const rawStudents =
+            await apiClient.getParentStudents(
+              user.id,
+              accessToken,
+            );
+
+
+          if (!active) {
+            return;
+          }
+
+
+          if (
+            !Array.isArray(
+              rawStudents,
+            )
+          ) {
+            setStudents([]);
+            setSelectedStudentId(
+              null,
+            );
+            return;
+          }
+
+
+          const normalized =
+            rawStudents
               .map(
                 (student) =>
-                  student.grade_id,
+                  normalizeStudent(
+                    student,
+                  ),
               )
               .filter(
                 (
-                  gradeId,
-                ): gradeId is number =>
-                  typeof gradeId ===
-                    'number' &&
-                  Number.isInteger(
-                    gradeId,
+                  student,
+                ): student is ParentDashboardStudent =>
+                  student !== null,
+              );
+
+
+          if (!normalized.length) {
+            setStudents([]);
+            setSelectedStudentId(
+              null,
+            );
+            return;
+          }
+
+
+          const gradeIds =
+            Array.from(
+              new Set(
+                normalized
+                  .map(
+                    (student) =>
+                      student.grade_id,
+                  )
+                  .filter(
+                    (
+                      gradeId,
+                    ): gradeId is number =>
+                      typeof gradeId ===
+                        'number' &&
+                      Number.isInteger(
+                        gradeId,
+                      ),
                   ),
               ),
-          ),
-        );
+            );
 
-        const gradeResults =
-          await Promise.all(
-            gradeIds.map(
-              async (gradeId) => {
-                try {
-                  const grade =
-                    await apiClient.getGrade(
+
+          const gradeResults =
+            await Promise.all(
+              gradeIds.map(
+                async (
+                  gradeId,
+                ) => {
+                  try {
+                    const grade =
+                      await apiClient.getGrade(
+                        gradeId,
+                        accessToken,
+                      );
+
+                    return [
                       gradeId,
-                      accessToken,
-                    );
+                      grade.title,
+                    ] as const;
+                  } catch {
+                    return [
+                      gradeId,
+                      null,
+                    ] as const;
+                  }
+                },
+              ),
+            );
 
-                  return [
-                    gradeId,
-                    grade,
-                  ] as const;
-                } catch {
-                  return [
-                    gradeId,
-                    null,
-                  ] as const;
-                }
+
+          if (!active) {
+            return;
+          }
+
+
+          const gradeTitles =
+            new Map<
+              number,
+              string | null
+            >(
+              gradeResults,
+            );
+
+
+          const dashboardStudents =
+            normalized.map(
+              (student) => {
+                const gradeTitle =
+                  student.grade_id !==
+                  null
+                    ? gradeTitles.get(
+                        student.grade_id,
+                      ) ??
+                      `الصف ${student.grade_id}`
+                    : 'الصف غير محدد';
+
+
+                return {
+                  ...student,
+                  grade_title:
+                    gradeTitle,
+                };
               },
-            ),
+            );
+
+
+          setStudents(
+            dashboardStudents,
           );
 
-        if (!active) {
-          return;
-        }
 
-        const grades = new Map<
-          number,
-          GradeInfo | null
-        >(
-          gradeResults,
-        );
+          setSelectedStudentId(
+            (current) => {
+              if (
+                current &&
+                dashboardStudents.some(
+                  (student) =>
+                    student.student_profile_id ===
+                    current,
+                )
+              ) {
+                return current;
+              }
 
-        const normalizedStudents =
-          parentStudents.map(
-            (student) => {
-              const grade =
-                student.grade_id
-                  ? grades.get(
-                      student.grade_id,
-                    )
-                  : null;
 
-              const gradeTitle =
-                grade?.title ??
-                (student.grade_id
-                  ? `الصف ${student.grade_id}`
-                  : 'الصف غير محدد');
-
-              return {
-                ...student,
-                grade_title:
-                  gradeTitle,
-              };
+              return (
+                dashboardStudents[0]
+                  ?.student_profile_id ??
+                null
+              );
             },
           );
+        } catch (err) {
+          console.error(
+            'Failed to load parent dashboard:',
+            err,
+          );
 
-        setStudents(
-          normalizedStudents,
-        );
 
-        setSelectedStudentId(
-          (current) => {
-            if (
-              current &&
-              normalizedStudents.some(
-                (student) =>
-                  student.student_profile_id ===
-                  current,
-              )
-            ) {
-              return current;
-            }
+          if (!active) {
+            return;
+          }
 
-            return (
-              normalizedStudents[0]
-                ?.student_profile_id ??
-              null
+
+          setStudents([]);
+          setSelectedStudentId(
+            null,
+          );
+
+
+          if (
+            err instanceof Error
+          ) {
+            setError(
+              err.message,
             );
-          },
-        );
-      } catch (err) {
-        console.error(
-          'Failed to load parent dashboard:',
-          err,
-        );
-
-        if (!active) {
-          return;
-        }
-
-        setStudents([]);
-        setSelectedStudentId(null);
-
-        if (
-          err &&
-          typeof err === 'object' &&
-          'message' in err &&
-          typeof (
-            err as {
-              message?: unknown;
-            }
-          ).message === 'string'
-        ) {
-          setError(
-            (
+          } else if (
+            err &&
+            typeof err ===
+              'object' &&
+            'message' in err &&
+            typeof (
               err as {
-                message: string;
+                message?: unknown;
               }
-            ).message,
-          );
-        } else if (
-          err instanceof Error
-        ) {
-          setError(
-            err.message,
-          );
-        } else {
-          setError(
-            'تعذر تحميل لوحة ولي الأمر.',
-          );
+            ).message ===
+              'string'
+          ) {
+            setError(
+              (
+                err as {
+                  message: string;
+                }
+              ).message,
+            );
+          } else {
+            setError(
+              'تعذر تحميل لوحة ولي الأمر.',
+            );
+          }
+        } finally {
+          if (active) {
+            setLoading(false);
+          }
         }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    };
+      };
+
 
     loadDashboard();
+
 
     return () => {
       active = false;
     };
   }, []);
 
+
   if (loading) {
     return (
       <main
-        className="max-w-6xl mx-auto px-4 py-10"
+        className="max-w-6xl mx-auto px-4 py-10 text-slate-100"
         dir="rtl"
       >
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center">
+        <div
+          className="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center"
+          role="status"
+          aria-live="polite"
+        >
           <p className="text-amber-400 font-bold animate-pulse">
             جاري تحميل لوحة ولي الأمر...
           </p>
@@ -366,13 +615,17 @@ const ParentDashboard: React.FC = () => {
     );
   }
 
+
   if (error) {
     return (
       <main
-        className="max-w-6xl mx-auto px-4 py-10"
+        className="max-w-6xl mx-auto px-4 py-10 text-slate-100"
         dir="rtl"
       >
-        <div className="bg-slate-900 border border-red-900/50 rounded-2xl p-8 text-center">
+        <div
+          className="bg-slate-900 border border-red-900/50 rounded-2xl p-8 text-center"
+          role="alert"
+        >
           <div className="text-4xl mb-4">
             ⚠️
           </div>
@@ -381,7 +634,7 @@ const ParentDashboard: React.FC = () => {
             تعذر تحميل لوحة ولي الأمر
           </h1>
 
-          <p className="text-sm text-slate-400 mt-3">
+          <p className="text-sm text-slate-400 mt-3 leading-7">
             {error}
           </p>
 
@@ -398,6 +651,7 @@ const ParentDashboard: React.FC = () => {
       </main>
     );
   }
+
 
   return (
     <main
@@ -416,11 +670,12 @@ const ParentDashboard: React.FC = () => {
         </h1>
 
         <p className="text-slate-400 mt-2 leading-7">
-          تابع تقدم أبنائك الدراسي وتفاعلهم
-          مع الدروس والألعاب والأنشطة
-          التعليمية.
+          تابع تقدم أبنائك الدراسي
+          ونشاطهم في الدروس والألعاب
+          والأنشطة التعليمية.
         </p>
       </header>
+
 
       {students.length === 0 ? (
         <section className="bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center">
@@ -433,9 +688,8 @@ const ParentDashboard: React.FC = () => {
           </h2>
 
           <p className="text-sm text-slate-400 mt-3 leading-7">
-            لا توجد حاليًا علاقة مسجلة بين
-            حساب ولي الأمر وأي طالب في قاعدة
-            البيانات.
+            لا توجد حاليًا علاقة مسجلة
+            بين حساب ولي الأمر وأي طالب.
           </p>
         </section>
       ) : (
@@ -452,6 +706,7 @@ const ParentDashboard: React.FC = () => {
                     const isSelected =
                       student.student_profile_id ===
                       selectedStudentId;
+
 
                     return (
                       <button
@@ -480,14 +735,12 @@ const ParentDashboard: React.FC = () => {
                                 : 'bg-slate-800 text-amber-400',
                             ].join(' ')}
                           >
-                            {getInitials(
-                              student,
-                            )}
+                            ط
                           </div>
 
                           <div className="min-w-0">
                             <p className="font-black truncate">
-                              طالب The Tutor
+                              الطالب
                             </p>
 
                             <p className="text-xs text-slate-400 mt-1">
@@ -503,15 +756,14 @@ const ParentDashboard: React.FC = () => {
             </section>
           )}
 
+
           {selectedStudent && (
             <>
               <section className="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 mb-6">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center text-2xl font-black">
-                      {getInitials(
-                        selectedStudent,
-                      )}
+                      ط
                     </div>
 
                     <div>
@@ -540,11 +792,7 @@ const ParentDashboard: React.FC = () => {
                         : 'bg-slate-800 text-slate-500 border border-slate-700',
                     ].join(' ')}
                   >
-                    <span>
-                      {selectedStudent.is_active
-                        ? '●'
-                        : '●'}
-                    </span>
+                    <span>●</span>
 
                     {selectedStudent.is_active
                       ? 'الحساب نشط'
@@ -552,6 +800,7 @@ const ParentDashboard: React.FC = () => {
                   </div>
                 </div>
               </section>
+
 
               <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
@@ -566,6 +815,7 @@ const ParentDashboard: React.FC = () => {
                   </p>
                 </div>
 
+
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
                   <p className="text-xs text-slate-500">
                     الدروس المكتملة
@@ -577,6 +827,7 @@ const ParentDashboard: React.FC = () => {
                     )}
                   </p>
                 </div>
+
 
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
                   <p className="text-xs text-slate-500">
@@ -590,6 +841,7 @@ const ParentDashboard: React.FC = () => {
                   </p>
                 </div>
 
+
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
                   <p className="text-xs text-slate-500">
                     دقة الإجابات
@@ -602,6 +854,7 @@ const ParentDashboard: React.FC = () => {
                   </p>
                 </div>
               </section>
+
 
               <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
@@ -618,6 +871,7 @@ const ParentDashboard: React.FC = () => {
                     </span>
                   </div>
 
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
                       <p className="text-xs text-slate-500">
@@ -630,6 +884,7 @@ const ParentDashboard: React.FC = () => {
                         )}
                       </p>
                     </div>
+
 
                     <div className="bg-slate-950 border border-slate-800 rounded-xl p-4">
                       <p className="text-xs text-slate-500">
@@ -648,6 +903,7 @@ const ParentDashboard: React.FC = () => {
                     </div>
                   </div>
 
+
                   <div className="mt-5">
                     <div className="flex items-center justify-between text-xs mb-2">
                       <span className="text-slate-400">
@@ -660,6 +916,7 @@ const ParentDashboard: React.FC = () => {
                         )}
                       </span>
                     </div>
+
 
                     <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
                       <div
@@ -679,6 +936,7 @@ const ParentDashboard: React.FC = () => {
                       />
                     </div>
 
+
                     <p className="text-xs text-slate-500 mt-3">
                       {getAccuracyLabel(
                         Number(
@@ -689,6 +947,7 @@ const ParentDashboard: React.FC = () => {
                     </p>
                   </div>
                 </div>
+
 
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
                   <h2 className="text-lg font-black mb-5">
@@ -708,6 +967,7 @@ const ParentDashboard: React.FC = () => {
                       </span>
                     </div>
 
+
                     <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-4">
                       <span className="text-sm text-slate-400">
                         الدروس المكتملة
@@ -720,6 +980,7 @@ const ParentDashboard: React.FC = () => {
                       </span>
                     </div>
 
+
                     <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-4">
                       <span className="text-sm text-slate-400">
                         الألعاب
@@ -731,6 +992,7 @@ const ParentDashboard: React.FC = () => {
                         )}
                       </span>
                     </div>
+
 
                     <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-4">
                       <span className="text-sm text-slate-400">
@@ -752,6 +1014,11 @@ const ParentDashboard: React.FC = () => {
       )}
     </main>
   );
+};
+
+
+export {
+  ParentDashboard,
 };
 
 export default ParentDashboard;
