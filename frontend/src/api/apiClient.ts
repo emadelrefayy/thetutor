@@ -1622,10 +1622,7 @@ async function createQuestionAttempt(
   body: {
     session_question_id: string;
     answer: unknown;
-    is_correct: boolean;
-    points_awarded: number;
     response_time_ms?: number | null;
-    feedback?: Record<string, unknown>;
   },
   token?: string | null,
 ): Promise<QuestionAttempt> {
