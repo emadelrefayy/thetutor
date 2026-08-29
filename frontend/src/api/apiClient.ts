@@ -158,6 +158,10 @@ export interface CurriculumSource {
   metadata?: Record<string, unknown> | null;
   created_at?: string | null;
   
+export interface LessonSource extends CurriculumSource {
+  locator?: string | null;
+  notes?: string | null;
+
 }
 export interface LessonSourceRef {
   lesson_id: number;
