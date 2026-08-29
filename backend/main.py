@@ -2434,7 +2434,250 @@ async def admin_content_overview(
 
     return result
 
+# ---------------------------------------------------------------------
+# Admin dashboard
+# ---------------------------------------------------------------------
 
+ADMIN_DASHBOARD_TABLES = (
+    "grades",
+    "terms",
+    "subjects",
+    "units",
+    "lessons",
+    "lesson_content_blocks",
+    "lesson_assets",
+    "learning_objectives",
+    "lesson_vocabulary",
+    "concepts",
+    "questions",
+    "curriculum_sources",
+    "game_templates",
+    "game_definitions",
+    "profiles",
+    "student_profiles",
+    "plans",
+    "subscriptions",
+)
+
+ADMIN_DIAGNOSTIC_TABLES = (
+    "profiles",
+    "student_profiles",
+    "grades",
+    "terms",
+    "subjects",
+    "units",
+    "lessons",
+    "lesson_content_blocks",
+    "lesson_assets",
+    "learning_objectives",
+    "lesson_vocabulary",
+    "concepts",
+    "questions",
+    "question_options",
+    "game_templates",
+    "game_definitions",
+    "game_definition_questions",
+    "lesson_progress",
+    "learning_events",
+    "plans",
+    "subscriptions",
+)
+
+
+async def admin_count_table(table: str) -> int:
+    key = SUPABASE_SERVICE_ROLE_KEY
+
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Prefer": "count=exact",
+    }
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            f"{SUPABASE_REST_URL}/{table}",
+            headers=headers,
+            params={
+                "select": "id",
+                "limit": "1",
+            },
+        )
+
+    if response.status_code >= 400:
+        try:
+            error_data = response.json()
+        except ValueError:
+            error_data = response.text
+
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Supabase count request failed.",
+                "table": table,
+                "status": response.status_code,
+                "response": error_data,
+            },
+        )
+
+    content_range = response.headers.get(
+        "content-range",
+        "",
+    )
+
+    if "/" in content_range:
+        total = content_range.rsplit("/", 1)[1]
+
+        if total != "*":
+            try:
+                return int(total)
+            except ValueError:
+                pass
+
+    return len(response.json() if response.content else [])
+
+
+@app.get("/api/admin/dashboard")
+async def admin_dashboard(
+    authorization: str | None = Header(default=None),
+):
+    await require_admin(authorization)
+
+    counts: dict[str, int] = {}
+
+    for table in ADMIN_DASHBOARD_TABLES:
+        counts[table] = await admin_count_table(table)
+
+    return {
+        "content": {
+            "grades": counts["grades"],
+            "terms": counts["terms"],
+            "subjects": counts["subjects"],
+            "units": counts["units"],
+            "lessons": counts["lessons"],
+            "lesson_content_blocks": counts[
+                "lesson_content_blocks"
+            ],
+            "lesson_assets": counts["lesson_assets"],
+            "learning_objectives": counts[
+                "learning_objectives"
+            ],
+            "lesson_vocabulary": counts[
+                "lesson_vocabulary"
+            ],
+            "concepts": counts["concepts"],
+            "questions": counts["questions"],
+            "curriculum_sources": counts[
+                "curriculum_sources"
+            ],
+            "game_templates": counts["game_templates"],
+            "game_definitions": counts[
+                "game_definitions"
+            ],
+        },
+        "users": {
+            "profiles": counts["profiles"],
+            "students": counts["student_profiles"],
+        },
+        "subscriptions": {
+            "plans": counts["plans"],
+            "subscriptions": counts["subscriptions"],
+        },
+    }
+
+
+@app.get("/api/admin/diagnostics")
+async def admin_diagnostics(
+    authorization: str | None = Header(default=None),
+):
+    await require_admin(authorization)
+
+    started_at = datetime.now(timezone.utc)
+
+    checks: list[dict[str, Any]] = []
+
+    for table in ADMIN_DIAGNOSTIC_TABLES:
+        check_started_at = datetime.now(timezone.utc)
+
+        try:
+            await admin_count_table(table)
+
+            duration_ms = int(
+                (
+                    datetime.now(timezone.utc)
+                    - check_started_at
+                ).total_seconds()
+                * 1000
+            )
+
+            checks.append(
+                {
+                    "name": table,
+                    "status": "pass",
+                    "duration_ms": duration_ms,
+                }
+            )
+
+        except HTTPException as exc:
+            duration_ms = int(
+                (
+                    datetime.now(timezone.utc)
+                    - check_started_at
+                ).total_seconds()
+                * 1000
+            )
+
+            checks.append(
+                {
+                    "name": table,
+                    "status": "fail",
+                    "duration_ms": duration_ms,
+                    "error": exc.detail,
+                }
+            )
+
+        except Exception as exc:
+            duration_ms = int(
+                (
+                    datetime.now(timezone.utc)
+                    - check_started_at
+                ).total_seconds()
+                * 1000
+            )
+
+            checks.append(
+                {
+                    "name": table,
+                    "status": "fail",
+                    "duration_ms": duration_ms,
+                    "error": str(exc),
+                }
+            )
+
+    failed = [
+        check
+        for check in checks
+        if check["status"] != "pass"
+    ]
+
+    total_duration_ms = int(
+        (
+            datetime.now(timezone.utc)
+            - started_at
+        ).total_seconds()
+        * 1000
+    )
+
+    return {
+        "status": "healthy" if not failed else "degraded",
+        "checked_at": now_iso(),
+        "duration_ms": total_duration_ms,
+        "checks": checks,
+        "summary": {
+            "total": len(checks),
+            "passed": len(checks) - len(failed),
+            "failed": len(failed),
+        },
+    }
 # ---------------------------------------------------------------------
 # Admin lessons
 # ---------------------------------------------------------------------
