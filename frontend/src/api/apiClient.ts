@@ -159,6 +159,12 @@ export interface CurriculumSource {
   created_at?: string | null;
   
 }
+export interface LessonSourceRef {
+  lesson_id: number;
+  source_id: string;
+  locator?: string | null;
+  notes?: string | null;
+}
 
 export interface QuestionOption {
   id: string;
