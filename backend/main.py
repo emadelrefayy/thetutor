@@ -1695,10 +1695,6 @@ async def update_game_session(
 
     payload = {
         "status": data.status,
-        "score": data.score,
-        "max_score": data.max_score,
-        "accuracy": data.accuracy,
-        "xp_earned": data.xp_earned,
         "metadata": data.metadata,
     }
 
@@ -1719,6 +1715,11 @@ async def update_game_session(
     )
 
     return rows[0] if rows else payload
+
+
+@app.post(
+    "/api/students/{student_profile_id}/question-attempts"
+)
 
 @app.post(
     "/api/students/{student_profile_id}/question-attempts"
