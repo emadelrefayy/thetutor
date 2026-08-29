@@ -874,107 +874,56 @@ const LessonPage: React.FC = () => {
     }
 
     if (
-  type === "game" ||
-  type === "activity"
-) {
-  const matchingGames =
-    type === "game"
-      ? games.filter(
-          (game) =>
-            Number(game.lesson_id) ===
-            Number(lesson?.id),
-        )
-      : [];
+      type === "game" ||
+      type === "activity"
+    ) {
+      return (
+        <article
+          key={block.id}
+          className="rounded-2xl border border-amber-500/20 bg-slate-900 p-5 shadow-lg"
+        >
+          <div className="flex items-start gap-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-xl">
+              {type === "game"
+                ? "🎮"
+                : "🎯"}
+            </span>
 
-  return (
-    <article
-      key={block.id}
-      className="rounded-2xl border border-amber-500/20 bg-slate-900 p-5 shadow-lg"
-    >
-      <div className="flex items-start gap-4">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-xl">
-          {type === "game"
-            ? gameIcon(
-                matchingGames[0]
-                  ?.template?.game_type,
-              )
-            : "🎯"}
-        </span>
-
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold text-slate-500">
-            {blockLabel(type)}
-          </p>
-
-          <h3 className="mt-1 text-lg font-black text-slate-100">
-            {heading ??
-              (type === "game"
-                ? matchingGames[0]?.name ??
-                  "لعبة تعليمية"
-                : "نشاط تعليمي")}
-          </h3>
-
-          {text && (
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-400">
-              {text}
-            </p>
-          )}
-
-          {type === "game" &&
-            matchingGames.length > 0 && (
-              <div className="mt-4 space-y-3">
-                {matchingGames.map((game) => {
-                  const launchUrl =
-                    gameLaunchUrl(game);
-
-                  return (
-                    <div
-                      key={game.id}
-                      className="flex flex-wrap items-center gap-3"
-                    >
-                      {launchUrl ? (
-                        <a
-                          href={launchUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex rounded-xl bg-amber-500 px-5 py-3 font-black text-slate-950 transition-colors hover:bg-amber-400"
-                        >
-                          بدء اللعبة 🎮
-                        </a>
-                      ) : (
-                        <span className="text-sm font-bold text-slate-500">
-                          اللعبة غير متاحة حاليًا.
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-          {type === "game" &&
-            matchingGames.length === 0 && (
-              <p className="mt-4 text-sm font-bold text-slate-500">
-                لا توجد لعبة مرتبطة بهذا الدرس.
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-500">
+                {blockLabel(type)}
               </p>
-            )}
 
-          {type === "activity" &&
-            url && (
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex rounded-xl bg-amber-500 px-5 py-3 font-black text-slate-950 transition-colors hover:bg-amber-400"
-              >
-                فتح النشاط ↗
-              </a>
-            )}
-        </div>
-      </div>
-    </article>
-  );
-}
+              <h3 className="mt-1 text-lg font-black text-slate-100">
+                {heading ??
+                  (type === "game"
+                    ? "لعبة تعليمية"
+                    : "نشاط تعليمي")}
+              </h3>
+
+              {text && (
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-400">
+                  {text}
+                </p>
+              )}
+
+              {url && (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-flex rounded-xl bg-amber-500 px-5 py-3 font-black text-slate-950 transition-colors hover:bg-amber-400"
+                >
+                  {type === "game"
+                    ? "بدء اللعبة 🎮"
+                    : "فتح النشاط ↗"}
+                </a>
+              )}
+            </div>
+          </div>
+        </article>
+      );
+    }
 
     return (
       <article
