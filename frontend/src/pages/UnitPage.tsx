@@ -170,7 +170,6 @@ const UnitPage: React.FC = () => {
         className="min-h-[calc(100vh-4rem)] bg-slate-950 text-slate-100 px-4 py-8"
       >
         <div className="max-w-xl mx-auto">
-
           <section
             className="bg-slate-900 border border-red-900/50 rounded-3xl p-8 text-center"
             role="alert"
@@ -194,9 +193,7 @@ const UnitPage: React.FC = () => {
             >
               العودة للوحة الطالب
             </Link>
-
           </section>
-
         </div>
       </main>
     );
@@ -320,8 +317,7 @@ const UnitPage: React.FC = () => {
                     Number.isInteger(
                       lesson.lesson_number,
                     ) &&
-                    lesson.lesson_number >
-                      0
+                    lesson.lesson_number > 0
                       ? lesson.lesson_number
                       : index + 1;
 
@@ -333,11 +329,6 @@ const UnitPage: React.FC = () => {
                   const hasInfographic =
                     Boolean(
                       lesson.infographic_url,
-                    );
-
-                  const hasGame =
-                    Boolean(
-                      lesson.game_url,
                     );
 
                   return (
@@ -373,8 +364,7 @@ const UnitPage: React.FC = () => {
                           {/* Available resources */}
 
                           {(hasVideo ||
-                            hasInfographic ||
-                            hasGame) && (
+                            hasInfographic) && (
                             <div className="flex flex-wrap gap-2 mt-3">
 
                               {hasVideo && (
@@ -386,12 +376,6 @@ const UnitPage: React.FC = () => {
                               {hasInfographic && (
                                 <span className="px-2.5 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-300 text-[10px] font-bold">
                                   🖼️ إنفوجراف
-                                </span>
-                              )}
-
-                              {hasGame && (
-                                <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                                  🎮 لعبة
                                 </span>
                               )}
 
