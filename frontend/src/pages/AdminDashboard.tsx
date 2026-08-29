@@ -1626,84 +1626,82 @@ const AdminDashboard: React.FC = () => {
   };
 
   const renderSources = () => {
-    if (
-      sources.length ===
-      0
-    ) {
-      return renderEmpty(
-        "لا توجد مصادر مرتبطة بهذا الدرس.",
-      );
-    }
+  if (sources.length === 0) {
+    return renderEmpty(
+      "لا توجد مصادر مرتبطة بهذا الدرس.",
+    );
+  }
 
-    return (
-      <div className="grid gap-3 md:grid-cols-2">
-        {sources.map(
-          (source) => (
-            <article
-              key={source.id}
-              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-            >
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {sources.map((source) => (
+        <article
+          key={source.id}
+          className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
               <h3 className="font-black">
-                {source.title}
+                {source.name}
               </h3>
 
-              {source.author && (
-                <p className="text-xs text-slate-400 mt-2">
-                  المؤلف:{" "}
-                  {source.author}
-                </p>
-              )}
+              <p className="text-[10px] text-slate-500 mt-1">
+                {source.source_type}
+              </p>
+            </div>
+          </div>
 
-              {source.publisher && (
-                <p className="text-xs text-slate-500 mt-1">
-                  الناشر:{" "}
-                  {source.publisher}
-                </p>
-              )}
+          {source.publisher && (
+            <p className="text-xs text-slate-400 mt-3">
+              الناشر: {source.publisher}
+            </p>
+          )}
 
-              {source.edition && (
-                <p className="text-xs text-slate-500 mt-1">
-                  الإصدار:{" "}
-                  {source.edition}
-                </p>
-              )}
+          {source.edition && (
+            <p className="text-xs text-slate-500 mt-1">
+              الإصدار: {source.edition}
+            </p>
+          )}
 
-              {source.academic_year && (
-                <p className="text-xs text-slate-500 mt-1">
-                  العام الدراسي:{" "}
-                  {
-                    source.academic_year
-                  }
-                </p>
-              )}
+          {source.academic_year && (
+            <p className="text-xs text-slate-500 mt-1">
+              العام الدراسي: {source.academic_year}
+            </p>
+          )}
 
-              {source.source_url && (
-                <a
-                  href={
-                    source.source_url
-                  }
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block text-xs text-blue-400 hover:text-blue-300 mt-3 break-all"
-                >
-                  {source.source_url}
-                </a>
-              )}
+          {source.language && (
+            <p className="text-xs text-slate-500 mt-1">
+              اللغة: {source.language}
+            </p>
+          )}
 
-              {source.rights_notes && (
-                <p className="text-xs text-slate-500 mt-3 leading-6">
-                  الحقوق:{" "}
-                  {
-                    source.rights_notes
-                  }
-                </p>
-              )}
-            </article>
-          ),
-        )}
-      </div>
-    );
-  };
+          {source.source_url && (
+            <a
+              href={source.source_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block text-xs text-blue-400 hover:text-blue-300 mt-3 break-all"
+            >
+              {source.source_url}
+            </a>
+          )}
+
+          {source.rights_notes && (
+            <p className="text-xs text-slate-500 mt-3 leading-6">
+              الحقوق: {source.rights_notes}
+            </p>
+          )}
+
+          {source.notes && (
+            <p className="text-xs text-slate-500 mt-2 leading-6">
+              ملاحظات: {source.notes}
+            </p>
+          )}
+        </article>
+      ))}
+    </div>
+  );
+};
 
   const renderLesson = () => {
     if (!selectedLesson) {
