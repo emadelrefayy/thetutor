@@ -610,7 +610,55 @@ export interface AdminContentOverview {
   game_templates: number;
   game_definitions: number;
 }
+export interface AdminDashboardResponse {
+  content: {
+    grades: number;
+    terms: number;
+    subjects: number;
+    units: number;
+    lessons: number;
+    lesson_content_blocks: number;
+    lesson_assets: number;
+    learning_objectives: number;
+    lesson_vocabulary: number;
+    concepts: number;
+    questions: number;
+    curriculum_sources: number;
+    game_templates: number;
+    game_definitions: number;
+  };
+  users: {
+    profiles: number;
+    students: number;
+  };
+  subscriptions: {
+    plans: number;
+    subscriptions: number;
+  };
+}
 
+export type AdminDiagnosticStatus =
+  | "pass"
+  | "fail";
+
+export interface AdminDiagnosticCheck {
+  name: string;
+  status: AdminDiagnosticStatus;
+  duration_ms: number;
+  error?: unknown;
+}
+
+export interface AdminDiagnosticsResponse {
+  status: "healthy" | "degraded";
+  checked_at: string;
+  duration_ms: number;
+  checks: AdminDiagnosticCheck[];
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+  };
+}
 export interface AdminLessonCreateInput {
   subject_id: number;
   unit_id: number;
