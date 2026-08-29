@@ -157,8 +157,7 @@ export interface CurriculumSource {
   rights_notes?: string | null;
   metadata?: Record<string, unknown> | null;
   created_at?: string | null;
-  locator?: string | null;
-  notes?: string | null;
+  
 }
 
 export interface QuestionOption {
