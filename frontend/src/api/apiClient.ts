@@ -594,22 +594,6 @@ export interface AdminProfile {
   created_at?: string | null;
 }
 
-export interface AdminContentOverview {
-  grades: number;
-  terms: number;
-  subjects: number;
-  units: number;
-  lessons: number;
-  lesson_content_blocks: number;
-  lesson_assets: number;
-  learning_objectives: number;
-  lesson_vocabulary: number;
-  concepts: number;
-  questions: number;
-  curriculum_sources: number;
-  game_templates: number;
-  game_definitions: number;
-}
 export interface AdminDashboardResponse {
   content: {
     grades: number;
