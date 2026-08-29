@@ -1803,7 +1803,23 @@ async function getAdminContentOverview(
     token,
   );
 }
+async function getAdminDashboard(
+  token?: string | null,
+): Promise<AdminDashboardResponse> {
+  return get<AdminDashboardResponse>(
+    "/admin/dashboard",
+    token,
+  );
+}
 
+async function getAdminDiagnostics(
+  token?: string | null,
+): Promise<AdminDiagnosticsResponse> {
+  return get<AdminDiagnosticsResponse>(
+    "/admin/diagnostics",
+    token,
+  );
+}
 /* ---------------------------------------------------------------------
  * Admin lessons
  * --------------------------------------------------------------------- */
