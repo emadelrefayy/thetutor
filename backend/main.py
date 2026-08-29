@@ -2485,6 +2485,12 @@ ADMIN_DIAGNOSTIC_TABLES = (
 
 
 async def admin_count_table(table: str) -> int:
+    count_columns = {
+        "student_profiles": "profile_id",
+    }
+
+    column = count_columns.get(table, "id")
+
     key = SUPABASE_SERVICE_ROLE_KEY
 
     headers = {
@@ -2498,7 +2504,7 @@ async def admin_count_table(table: str) -> int:
             f"{SUPABASE_REST_URL}/{table}",
             headers=headers,
             params={
-                "select": "id",
+                "select": column,
                 "limit": "1",
             },
         )
@@ -2533,7 +2539,11 @@ async def admin_count_table(table: str) -> int:
             except ValueError:
                 pass
 
-    return len(response.json() if response.content else [])
+    return len(
+        response.json()
+        if response.content
+        else []
+    )
 
 
 @app.get("/api/admin/dashboard")
