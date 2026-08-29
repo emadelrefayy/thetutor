@@ -1720,7 +1720,6 @@ async def update_game_session(
 
     return rows[0] if rows else payload
 
-
 @app.post(
     "/api/students/{student_profile_id}/question-attempts"
 )
@@ -1778,35 +1777,88 @@ async def create_question_attempt(
             detail="Access denied.",
         )
 
-    if (
-        data.points_awarded
-        > session_question["points_possible"]
-    ):
+    try:
+        result = await supabase_request(
+            "POST",
+            "rpc/submit_game_answer",
+            payload={
+                "p_student_profile_id": student_profile_id,
+                "p_session_id": session_question[
+                    "session_id"
+                ],
+                "p_session_question_id": (
+                    data.session_question_id
+                ),
+                "p_answer": data.answer,
+                "p_response_time_ms": (
+                    data.response_time_ms
+                ),
+            },
+            privileged=True,
+        )
+    except HTTPException as exc:
+        detail = exc.detail
+
+        if isinstance(detail, dict):
+            response_data = detail.get("response")
+
+            if isinstance(response_data, dict):
+                message = str(
+                    response_data.get("message", "")
+                )
+
+                if "already_answered" in message:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="السؤال تمت الإجابة عليه بالفعل.",
+                    )
+
+                if "invalid_game_session" in message:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="جلسة اللعبة غير صالحة.",
+                    )
+
+                if "invalid_game_question" in message:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="سؤال اللعبة غير صالح.",
+                    )
+
+        raise
+
+    if not isinstance(result, dict):
         raise HTTPException(
-            status_code=422,
-            detail=(
-                "points_awarded cannot exceed "
-                "points_possible."
-            ),
+            status_code=502,
+            detail="Could not submit game answer.",
         )
 
-    rows = await supabase_request(
-        "POST",
-        "question_attempts",
-        payload={
-            "session_question_id": data.session_question_id,
-            "student_profile_id": student_profile_id,
-            "answer": data.answer,
-            "is_correct": data.is_correct,
-            "points_awarded": data.points_awarded,
-            "response_time_ms": data.response_time_ms,
-            "answered_at": now_iso(),
-            "feedback": data.feedback,
+    return {
+        "id": result["attempt_id"],
+        "session_question_id": (
+            data.session_question_id
+        ),
+        "student_profile_id": student_profile_id,
+        "answer": data.answer,
+        "is_correct": result["is_correct"],
+        "points_awarded": result["points_awarded"],
+        "response_time_ms": data.response_time_ms,
+        "answered_at": now_iso(),
+        "feedback": {
+            "explanation": result.get(
+                "explanation"
+            ),
+            "correct_answer": result.get(
+                "correct_answer"
+            ),
+            "source_lesson_id": result.get(
+                "source_lesson_id"
+            ),
+            "source_lesson_title": result.get(
+                "source_lesson_title"
+            ),
         },
-        authorization=auth,
-    )
-
-    return rows[0] if rows else {}
+    }
 
 
 # =====================================================================
