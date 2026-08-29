@@ -1,8 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { Link } from "react-router-dom";
 
 import {
   apiClient,
+  type AdminDashboardResponse,
+  type AdminDiagnosticsResponse,
   type Grade,
   type Term,
   type Subject,
@@ -28,15 +35,78 @@ type ContentTab =
   | "questions"
   | "sources";
 
-interface HealthResponse {
-  service?: string;
-  status?: string;
-  version?: string;
-}
+type ConnectionState =
+  | "checking"
+  | "connected"
+  | "error";
+
+const EMPTY_DASHBOARD: AdminDashboardResponse = {
+  content: {
+    grades: 0,
+    terms: 0,
+    subjects: 0,
+    units: 0,
+    lessons: 0,
+    lesson_content_blocks: 0,
+    lesson_assets: 0,
+    learning_objectives: 0,
+    lesson_vocabulary: 0,
+    concepts: 0,
+    questions: 0,
+    curriculum_sources: 0,
+    game_templates: 0,
+    game_definitions: 0,
+  },
+  users: {
+    profiles: 0,
+    students: 0,
+  },
+  subscriptions: {
+    plans: 0,
+    subscriptions: 0,
+  },
+};
+
+const EMPTY_DIAGNOSTICS: AdminDiagnosticsResponse = {
+  status: "degraded",
+  checked_at: "",
+  duration_ms: 0,
+  checks: [],
+  summary: {
+    total: 0,
+    passed: 0,
+    failed: 0,
+  },
+};
 
 const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] =
     useState<ContentTab>("overview");
+
+  const [dashboard, setDashboard] =
+    useState<AdminDashboardResponse>(
+      EMPTY_DASHBOARD,
+    );
+
+  const [diagnostics, setDiagnostics] =
+    useState<AdminDiagnosticsResponse>(
+      EMPTY_DIAGNOSTICS,
+    );
+
+  const [dashboardLoading, setDashboardLoading] =
+    useState(false);
+
+  const [diagnosticsLoading, setDiagnosticsLoading] =
+    useState(false);
+
+  const [connection, setConnection] =
+    useState<ConnectionState>("checking");
+
+  const [lastChecked, setLastChecked] =
+    useState<string | null>(null);
+
+  const [error, setError] =
+    useState<string | null>(null);
 
   const [grades, setGrades] =
     useState<Grade[]>([]);
@@ -98,16 +168,6 @@ const AdminDashboard: React.FC = () => {
   const [lessonLoading, setLessonLoading] =
     useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
-
-  const [connection, setConnection] = useState<
-    "checking" | "connected" | "error"
-  >("checking");
-
-  const [lastChecked, setLastChecked] =
-    useState<string | null>(null);
-
   const selectedGrade = useMemo(
     () =>
       grades.find(
@@ -144,7 +204,7 @@ const AdminDashboard: React.FC = () => {
     [units, selectedUnitId],
   );
 
-  const resetLessonData = () => {
+  const resetLesson = useCallback(() => {
     setSelectedLesson(null);
     setSelectedLessonId(null);
     setContentBlocks([]);
@@ -154,77 +214,131 @@ const AdminDashboard: React.FC = () => {
     setConcepts([]);
     setQuestions([]);
     setSources([]);
-  };
+  }, []);
 
-  const resetFromGrade = () => {
+  const resetFromGrade = useCallback(() => {
     setTerms([]);
     setSubjects([]);
     setUnits([]);
     setLessons([]);
-    resetLessonData();
     setSelectedTermId(null);
     setSelectedSubjectId(null);
     setSelectedUnitId(null);
-  };
+    resetLesson();
+  }, [resetLesson]);
 
-  const resetFromTerm = () => {
+  const resetFromTerm = useCallback(() => {
     setSubjects([]);
     setUnits([]);
     setLessons([]);
-    resetLessonData();
     setSelectedSubjectId(null);
     setSelectedUnitId(null);
-  };
+    resetLesson();
+  }, [resetLesson]);
 
-  const resetFromSubject = () => {
+  const resetFromSubject = useCallback(() => {
     setUnits([]);
     setLessons([]);
-    resetLessonData();
     setSelectedUnitId(null);
-  };
+    resetLesson();
+  }, [resetLesson]);
 
-  const resetFromUnit = () => {
+  const resetFromUnit = useCallback(() => {
     setLessons([]);
-    resetLessonData();
-  };
+    resetLesson();
+  }, [resetLesson]);
 
-  const checkConnection = useCallback(
+  const loadDashboard = useCallback(
     async () => {
-      setConnection("checking");
+      setDashboardLoading(true);
+      setError(null);
 
       try {
-        const response =
-          await apiClient.get<HealthResponse>(
-            "/health",
-          );
+        const data =
+          await apiClient.getAdminDashboard();
 
-        if (
-          !response ||
-          response.status !== "healthy"
-        ) {
-          throw new Error(
-            "Backend health check failed.",
-          );
-        }
-
-        setConnection("connected");
-        setLastChecked(
-          new Date().toLocaleString("ar-EG"),
-        );
+        setDashboard(data);
       } catch (err) {
         console.error(
-          "Admin server check failed:",
+          "Admin dashboard loading failed:",
           err,
         );
 
-        setConnection("error");
-        setLastChecked(
-          new Date().toLocaleString("ar-EG"),
+        setError(
+          err instanceof Error
+            ? err.message
+            : "تعذر تحميل لوحة الإدارة.",
         );
+      } finally {
+        setDashboardLoading(false);
       }
     },
     [],
   );
+
+  const runDiagnostics = useCallback(
+    async () => {
+      setDiagnosticsLoading(true);
+
+      try {
+        const data =
+          await apiClient.getAdminDiagnostics();
+
+        setDiagnostics(data);
+
+        setConnection(
+          data.status === "healthy"
+            ? "connected"
+            : "error",
+        );
+
+        setLastChecked(
+          new Date().toLocaleString(
+            "ar-EG",
+          ),
+        );
+      } catch (err) {
+        console.error(
+          "Admin diagnostics failed:",
+          err,
+        );
+
+        setConnection("error");
+
+        setLastChecked(
+          new Date().toLocaleString(
+            "ar-EG",
+          ),
+        );
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "تعذر تنفيذ فحص النظام.",
+        );
+      } finally {
+        setDiagnosticsLoading(false);
+      }
+    },
+    [],
+  );
+
+  const refreshAdminData = useCallback(
+    async () => {
+      await Promise.all([
+        loadDashboard(),
+        runDiagnostics(),
+      ]);
+    },
+    [
+      loadDashboard,
+      runDiagnostics,
+    ],
+  );
+
+  useEffect(() => {
+    void refreshAdminData();
+  }, [refreshAdminData]);
 
   const loadGrades = useCallback(
     async () => {
@@ -235,33 +349,37 @@ const AdminDashboard: React.FC = () => {
         const data =
           await apiClient.getGrades();
 
-        if (!Array.isArray(data)) {
-          throw new Error(
-            "Invalid grades response.",
-          );
-        }
+        setGrades(
+          Array.isArray(data)
+            ? data
+            : [],
+        );
 
-        setGrades(data);
-
-        if (data.length === 0) {
+        if (
+          !Array.isArray(data) ||
+          data.length === 0
+        ) {
           resetFromGrade();
           return;
         }
 
-        const currentId =
+        const gradeId =
           selectedGradeId &&
           data.some(
             (item) =>
-              item.id === selectedGradeId,
+              item.id ===
+              selectedGradeId,
           )
             ? selectedGradeId
             : data[0].id;
 
-        setSelectedGradeId(currentId);
+        setSelectedGradeId(
+          gradeId,
+        );
 
         const termData =
           await apiClient.getGradeTerms(
-            currentId,
+            gradeId,
           );
 
         setTerms(
@@ -282,12 +400,15 @@ const AdminDashboard: React.FC = () => {
           selectedTermId &&
           termData.some(
             (item) =>
-              item.id === selectedTermId,
+              item.id ===
+              selectedTermId,
           )
             ? selectedTermId
             : termData[0].id;
 
-        setSelectedTermId(termId);
+        setSelectedTermId(
+          termId,
+        );
 
         const subjectData =
           await apiClient.getTermSubjects(
@@ -312,12 +433,15 @@ const AdminDashboard: React.FC = () => {
           selectedSubjectId &&
           subjectData.some(
             (item) =>
-              item.id === selectedSubjectId,
+              item.id ===
+              selectedSubjectId,
           )
             ? selectedSubjectId
             : subjectData[0].id;
 
-        setSelectedSubjectId(subjectId);
+        setSelectedSubjectId(
+          subjectId,
+        );
 
         const unitData =
           await apiClient.getUnits(
@@ -342,12 +466,15 @@ const AdminDashboard: React.FC = () => {
           selectedUnitId &&
           unitData.some(
             (item) =>
-              item.id === selectedUnitId,
+              item.id ===
+              selectedUnitId,
           )
             ? selectedUnitId
             : unitData[0].id;
 
-        setSelectedUnitId(unitId);
+        setSelectedUnitId(
+          unitId,
+        );
 
         const lessonData =
           await apiClient.getUnitLessons(
@@ -361,7 +488,7 @@ const AdminDashboard: React.FC = () => {
         );
       } catch (err) {
         console.error(
-          "Failed to load curriculum:",
+          "Curriculum loading failed:",
           err,
         );
 
@@ -379,12 +506,12 @@ const AdminDashboard: React.FC = () => {
       selectedTermId,
       selectedSubjectId,
       selectedUnitId,
+      resetFromGrade,
+      resetFromTerm,
+      resetFromSubject,
+      resetFromUnit,
     ],
   );
-
-  useEffect(() => {
-    void checkConnection();
-  }, [checkConnection]);
 
   useEffect(() => {
     void loadGrades();
@@ -393,7 +520,9 @@ const AdminDashboard: React.FC = () => {
   const handleGradeChange = async (
     gradeId: number,
   ) => {
-    setSelectedGradeId(gradeId);
+    setSelectedGradeId(
+      gradeId,
+    );
 
     resetFromGrade();
 
@@ -407,7 +536,9 @@ const AdminDashboard: React.FC = () => {
         );
 
       setTerms(
-        Array.isArray(data) ? data : [],
+        Array.isArray(data)
+          ? data
+          : [],
       );
 
       if (
@@ -417,63 +548,75 @@ const AdminDashboard: React.FC = () => {
         return;
       }
 
-      const termId = data[0].id;
+      const termId =
+        data[0].id;
 
-      setSelectedTermId(termId);
+      setSelectedTermId(
+        termId,
+      );
 
-      const subjectsData =
+      const subjectData =
         await apiClient.getTermSubjects(
           termId,
         );
 
       setSubjects(
-        Array.isArray(subjectsData)
-          ? subjectsData
+        Array.isArray(
+          subjectData,
+        )
+          ? subjectData
           : [],
       );
 
       if (
-        !Array.isArray(subjectsData) ||
-        subjectsData.length === 0
+        !Array.isArray(
+          subjectData,
+        ) ||
+        subjectData.length === 0
       ) {
         return;
       }
 
       const subjectId =
-        subjectsData[0].id;
+        subjectData[0].id;
 
-      setSelectedSubjectId(subjectId);
+      setSelectedSubjectId(
+        subjectId,
+      );
 
-      const unitsData =
+      const unitData =
         await apiClient.getUnits(
           subjectId,
         );
 
       setUnits(
-        Array.isArray(unitsData)
-          ? unitsData
+        Array.isArray(unitData)
+          ? unitData
           : [],
       );
 
       if (
-        !Array.isArray(unitsData) ||
-        unitsData.length === 0
+        !Array.isArray(unitData) ||
+        unitData.length === 0
       ) {
         return;
       }
 
-      const unitId = unitsData[0].id;
+      const unitId =
+        unitData[0].id;
 
-      setSelectedUnitId(unitId);
+      setSelectedUnitId(
+        unitId,
+      );
 
-      const lessonsData =
+      const lessonData =
         await apiClient.getUnitLessons(
           unitId,
         );
 
       setLessons(
-        Array.isArray(lessonsData)
-          ? lessonsData
+        Array.isArray(lessonData)
+          ? lessonData
           : [],
       );
     } catch (err) {
@@ -493,7 +636,9 @@ const AdminDashboard: React.FC = () => {
   const handleTermChange = async (
     termId: number,
   ) => {
-    setSelectedTermId(termId);
+    setSelectedTermId(
+      termId,
+    );
 
     resetFromTerm();
 
@@ -507,7 +652,9 @@ const AdminDashboard: React.FC = () => {
         );
 
       setSubjects(
-        Array.isArray(data) ? data : [],
+        Array.isArray(data)
+          ? data
+          : [],
       );
 
       if (
@@ -517,40 +664,46 @@ const AdminDashboard: React.FC = () => {
         return;
       }
 
-      const subjectId = data[0].id;
+      const subjectId =
+        data[0].id;
 
-      setSelectedSubjectId(subjectId);
+      setSelectedSubjectId(
+        subjectId,
+      );
 
-      const unitsData =
+      const unitData =
         await apiClient.getUnits(
           subjectId,
         );
 
       setUnits(
-        Array.isArray(unitsData)
-          ? unitsData
+        Array.isArray(unitData)
+          ? unitData
           : [],
       );
 
       if (
-        !Array.isArray(unitsData) ||
-        unitsData.length === 0
+        !Array.isArray(unitData) ||
+        unitData.length === 0
       ) {
         return;
       }
 
-      const unitId = unitsData[0].id;
+      const unitId =
+        unitData[0].id;
 
-      setSelectedUnitId(unitId);
+      setSelectedUnitId(
+        unitId,
+      );
 
-      const lessonsData =
+      const lessonData =
         await apiClient.getUnitLessons(
           unitId,
         );
 
       setLessons(
-        Array.isArray(lessonsData)
-          ? lessonsData
+        Array.isArray(lessonData)
+          ? lessonData
           : [],
       );
     } catch (err) {
@@ -570,7 +723,9 @@ const AdminDashboard: React.FC = () => {
   const handleSubjectChange = async (
     subjectId: number,
   ) => {
-    setSelectedSubjectId(subjectId);
+    setSelectedSubjectId(
+      subjectId,
+    );
 
     resetFromSubject();
 
@@ -584,7 +739,9 @@ const AdminDashboard: React.FC = () => {
         );
 
       setUnits(
-        Array.isArray(data) ? data : [],
+        Array.isArray(data)
+          ? data
+          : [],
       );
 
       if (
@@ -594,18 +751,21 @@ const AdminDashboard: React.FC = () => {
         return;
       }
 
-      const unitId = data[0].id;
+      const unitId =
+        data[0].id;
 
-      setSelectedUnitId(unitId);
+      setSelectedUnitId(
+        unitId,
+      );
 
-      const lessonsData =
+      const lessonData =
         await apiClient.getUnitLessons(
           unitId,
         );
 
       setLessons(
-        Array.isArray(lessonsData)
-          ? lessonsData
+        Array.isArray(lessonData)
+          ? lessonData
           : [],
       );
     } catch (err) {
@@ -625,7 +785,9 @@ const AdminDashboard: React.FC = () => {
   const handleUnitChange = async (
     unitId: number,
   ) => {
-    setSelectedUnitId(unitId);
+    setSelectedUnitId(
+      unitId,
+    );
 
     resetFromUnit();
 
@@ -639,7 +801,9 @@ const AdminDashboard: React.FC = () => {
         );
 
       setLessons(
-        Array.isArray(data) ? data : [],
+        Array.isArray(data)
+          ? data
+          : [],
       );
     } catch (err) {
       console.error(
@@ -658,7 +822,10 @@ const AdminDashboard: React.FC = () => {
   const loadLesson = async (
     lessonId: number,
   ) => {
-    setSelectedLessonId(lessonId);
+    setSelectedLessonId(
+      lessonId,
+    );
+
     setLessonLoading(true);
     setError(null);
 
@@ -673,7 +840,9 @@ const AdminDashboard: React.FC = () => {
         lessonQuestions,
         lessonSources,
       ] = await Promise.all([
-        apiClient.getLesson(lessonId),
+        apiClient.getLesson(
+          lessonId,
+        ),
         apiClient.getLessonContent(
           lessonId,
         ),
@@ -697,44 +866,67 @@ const AdminDashboard: React.FC = () => {
         ),
       ]);
 
-      setSelectedLesson(lesson);
+      setSelectedLesson(
+        lesson,
+      );
+
       setContentBlocks(
         Array.isArray(blocks)
           ? blocks
           : [],
       );
+
       setAssets(
-        Array.isArray(lessonAssets)
+        Array.isArray(
+          lessonAssets,
+        )
           ? lessonAssets
           : [],
       );
+
       setObjectives(
-        Array.isArray(lessonObjectives)
+        Array.isArray(
+          lessonObjectives,
+        )
           ? lessonObjectives
           : [],
       );
+
       setVocabulary(
-        Array.isArray(lessonVocabulary)
+        Array.isArray(
+          lessonVocabulary,
+        )
           ? lessonVocabulary
           : [],
       );
+
       setConcepts(
-        Array.isArray(lessonConcepts)
+        Array.isArray(
+          lessonConcepts,
+        )
           ? lessonConcepts
           : [],
       );
+
       setQuestions(
-        Array.isArray(lessonQuestions)
+        Array.isArray(
+          lessonQuestions,
+        )
           ? lessonQuestions
           : [],
       );
+
       setSources(
-        Array.isArray(lessonSources)
+        Array.isArray(
+          lessonSources,
+        )
           ? lessonSources
           : [],
       );
 
-      setActiveTab("lesson");
+      setActiveTab(
+        "lesson",
+      );
     } catch (err) {
       console.error(
         "Lesson loading failed:",
@@ -751,56 +943,117 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  const openLesson = (
-    lesson: Lesson,
-  ) => {
-    void loadLesson(lesson.id);
-  };
-
-  const connectionLabel =
-    connection === "connected"
-      ? "متصل"
-      : connection === "error"
-        ? "خطأ في الاتصال"
-        : "جاري الاختبار";
-
-  const connectionClass =
-    connection === "connected"
-      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-      : connection === "error"
-        ? "border-red-500/30 bg-red-500/10 text-red-400"
-        : "border-amber-500/30 bg-amber-500/10 text-amber-400";
-
-  const contentStats = [
+  const contentCards = [
+    {
+      label: "الصفوف",
+      value: dashboard.content.grades,
+      icon: "🎓",
+    },
+    {
+      label: "الفصول",
+      value: dashboard.content.terms,
+      icon: "📅",
+    },
+    {
+      label: "المواد",
+      value: dashboard.content.subjects,
+      icon: "📚",
+    },
+    {
+      label: "الوحدات",
+      value: dashboard.content.units,
+      icon: "🗂️",
+    },
     {
       label: "الدروس",
-      value: lessons.length,
+      value: dashboard.content.lessons,
       icon: "📖",
     },
     {
-      label: "Blocks",
-      value: contentBlocks.length,
+      label: "Content Blocks",
+      value:
+        dashboard.content
+          .lesson_content_blocks,
       icon: "🧩",
     },
     {
       label: "Assets",
-      value: assets.length,
+      value:
+        dashboard.content.lesson_assets,
       icon: "🖼️",
     },
     {
-      label: "أسئلة",
-      value: questions.length,
-      icon: "❓",
-    },
-    {
-      label: "أهداف",
-      value: objectives.length,
+      label: "الأهداف",
+      value:
+        dashboard.content
+          .learning_objectives,
       icon: "🎯",
     },
     {
-      label: "مفردات",
-      value: vocabulary.length,
+      label: "المفردات",
+      value:
+        dashboard.content
+          .lesson_vocabulary,
       icon: "🔤",
+    },
+    {
+      label: "المفاهيم",
+      value:
+        dashboard.content.concepts,
+      icon: "🧠",
+    },
+    {
+      label: "الأسئلة",
+      value:
+        dashboard.content.questions,
+      icon: "❓",
+    },
+    {
+      label: "المصادر",
+      value:
+        dashboard.content
+          .curriculum_sources,
+      icon: "📑",
+    },
+  ];
+
+  const systemCards = [
+    {
+      label: "المستخدمون",
+      value: dashboard.users.profiles,
+      icon: "👥",
+    },
+    {
+      label: "الطلاب",
+      value: dashboard.users.students,
+      icon: "🎒",
+    },
+    {
+      label: "Plans",
+      value:
+        dashboard.subscriptions.plans,
+      icon: "💳",
+    },
+    {
+      label: "Subscriptions",
+      value:
+        dashboard.subscriptions
+          .subscriptions,
+      icon: "🔐",
+    },
+    {
+      label: "Game Templates",
+      value:
+        dashboard.content
+          .game_templates,
+      icon: "🎮",
+    },
+    {
+      label: "Game Definitions",
+      value:
+        dashboard.content
+          .game_definitions,
+      icon: "🕹️",
     },
   ];
 
@@ -809,6 +1062,10 @@ const AdminDashboard: React.FC = () => {
     label: string;
     count?: number;
   }> = [
+    {
+      id: "overview",
+      label: "الرئيسية",
+    },
     {
       id: "lesson",
       label: "الدرس",
@@ -857,17 +1114,216 @@ const AdminDashboard: React.FC = () => {
       <div className="text-3xl mb-3">
         📭
       </div>
-
       <p className="text-sm text-slate-400">
         {message}
       </p>
     </div>
   );
 
+  const renderOverview = () => (
+    <div className="space-y-6">
+      <section>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-xl font-black">
+              نظرة عامة على المحتوى
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              أرقام مباشرة من قاعدة البيانات عبر Admin API.
+            </p>
+          </div>
+
+          {dashboardLoading && (
+            <span className="text-xs text-amber-400">
+              جاري التحديث...
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          {contentCards.map(
+            (card) => (
+              <article
+                key={card.label}
+                className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+              >
+                <div className="text-2xl">
+                  {card.icon}
+                </div>
+
+                <p className="text-xs text-slate-500 mt-3">
+                  {card.label}
+                </p>
+
+                <p className="text-2xl font-black text-slate-100 mt-1">
+                  {card.value.toLocaleString(
+                    "ar-EG",
+                  )}
+                </p>
+              </article>
+            ),
+          )}
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-xl font-black">
+              حالة المنصة
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              فحص مباشر للجداول الأساسية المطلوبة للإدارة.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              void runDiagnostics()
+            }
+            disabled={
+              diagnosticsLoading
+            }
+            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs font-black text-amber-400 disabled:opacity-50"
+          >
+            {diagnosticsLoading
+              ? "جاري الفحص..."
+              : "إعادة الفحص"}
+          </button>
+        </div>
+
+        <div
+          className={`rounded-2xl border p-5 ${
+            diagnostics.status ===
+            "healthy"
+              ? "border-emerald-500/30 bg-emerald-500/10"
+              : "border-red-500/30 bg-red-500/10"
+          }`}
+        >
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <p className="text-sm font-black">
+                {diagnostics.status ===
+                "healthy"
+                  ? "قاعدة البيانات والخدمات الأساسية تعمل."
+                  : "يوجد فشل في واحد أو أكثر من الاختبارات."}
+              </p>
+
+              <p className="text-xs opacity-70 mt-1">
+                Passed:{" "}
+                {
+                  diagnostics.summary
+                    .passed
+                }{" "}
+                /{" "}
+                {
+                  diagnostics.summary
+                    .total
+                }
+              </p>
+            </div>
+
+            <span
+              className={`text-xs font-black ${
+                diagnostics.status ===
+                "healthy"
+                  ? "text-emerald-400"
+                  : "text-red-400"
+              }`}
+            >
+              {diagnostics.status}
+            </span>
+          </div>
+        </div>
+
+        {diagnostics.checks.length >
+          0 && (
+          <div className="grid gap-2 mt-3 md:grid-cols-2 xl:grid-cols-3">
+            {diagnostics.checks.map(
+              (check) => (
+                <div
+                  key={check.name}
+                  className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-300">
+                      {check.name}
+                    </span>
+
+                    <span
+                      className={`text-[10px] font-black ${
+                        check.status ===
+                        "pass"
+                          ? "text-emerald-400"
+                          : "text-red-400"
+                      }`}
+                    >
+                      {check.status}
+                    </span>
+                  </div>
+
+                  <p className="text-[10px] text-slate-600 mt-1">
+                    {check.duration_ms} ms
+                  </p>
+
+                  {check.error && (
+                    <pre
+                      dir="ltr"
+                      className="text-[10px] text-red-400 mt-2 whitespace-pre-wrap break-all"
+                    >
+                      {JSON.stringify(
+                        check.error,
+                      )}
+                    </pre>
+                  )}
+                </div>
+              ),
+            )}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="text-xl font-black mb-4">
+          إدارة الحسابات والاشتراكات
+        </h2>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+          {systemCards.map(
+            (card) => (
+              <article
+                key={card.label}
+                className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+              >
+                <div className="text-2xl">
+                  {card.icon}
+                </div>
+
+                <p className="text-xs text-slate-500 mt-3">
+                  {card.label}
+                </p>
+
+                <p className="text-2xl font-black mt-1">
+                  {card.value.toLocaleString(
+                    "ar-EG",
+                  )}
+                </p>
+              </article>
+            ),
+          )}
+        </div>
+      </section>
+    </div>
+  );
+
   const renderBlocks = () => {
-    if (contentBlocks.length === 0) {
+    if (
+      contentBlocks.length ===
+      0
+    ) {
       return renderEmpty(
-        "لا توجد Content Blocks منشورة لهذا الدرس.",
+        "لا توجد Content Blocks لهذا الدرس.",
       );
     }
 
@@ -898,7 +1354,10 @@ const AdminDashboard: React.FC = () => {
                 </span>
               </div>
 
-              <pre className="overflow-auto rounded-xl bg-slate-950 border border-slate-800 p-4 text-xs text-slate-300 leading-6 text-left" dir="ltr">
+              <pre
+                dir="ltr"
+                className="overflow-auto rounded-xl bg-slate-950 border border-slate-800 p-4 text-xs text-slate-300 leading-6 text-left"
+              >
                 {JSON.stringify(
                   block.content,
                   null,
@@ -913,7 +1372,9 @@ const AdminDashboard: React.FC = () => {
   };
 
   const renderAssets = () => {
-    if (assets.length === 0) {
+    if (
+      assets.length === 0
+    ) {
       return renderEmpty(
         "لا توجد وسائط مرتبطة بهذا الدرس.",
       );
@@ -921,59 +1382,65 @@ const AdminDashboard: React.FC = () => {
 
     return (
       <div className="grid gap-4 md:grid-cols-2">
-        {assets.map((asset) => (
-          <article
-            key={asset.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs text-amber-400 font-black">
-                  {asset.asset_type}
-                </p>
+        {assets.map(
+          (asset) => (
+            <article
+              key={asset.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs text-amber-400 font-black">
+                    {asset.asset_type}
+                  </p>
 
-                <h3 className="font-black mt-1">
-                  {asset.title ||
-                    "بدون عنوان"}
-                </h3>
+                  <h3 className="font-black mt-1">
+                    {asset.title ||
+                      "بدون عنوان"}
+                  </h3>
+                </div>
+
+                <span className="text-xs text-slate-500">
+                  #{asset.sort_order}
+                </span>
               </div>
 
-              <span className="text-xs text-slate-500">
-                #{asset.sort_order}
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-400 mt-4 break-all">
-              {asset.url}
-            </p>
-
-            {asset.alt_text && (
-              <p className="text-xs text-slate-500 mt-2">
-                ALT: {asset.alt_text}
+              <p className="text-xs text-slate-400 mt-4 break-all">
+                {asset.url}
               </p>
-            )}
 
-            <div className="mt-4">
-              <span
-                className={
-                  asset.is_published
-                    ? "text-xs text-emerald-400"
-                    : "text-xs text-slate-500"
-                }
-              >
-                {asset.is_published
-                  ? "Published"
-                  : "Draft"}
-              </span>
-            </div>
-          </article>
-        ))}
+              {asset.alt_text && (
+                <p className="text-xs text-slate-500 mt-2">
+                  ALT:{" "}
+                  {asset.alt_text}
+                </p>
+              )}
+
+              <div className="mt-4">
+                <span
+                  className={
+                    asset.is_published
+                      ? "text-xs text-emerald-400"
+                      : "text-xs text-slate-500"
+                  }
+                >
+                  {asset.is_published
+                    ? "Published"
+                    : "Draft"}
+                </span>
+              </div>
+            </article>
+          ),
+        )}
       </div>
     );
   };
 
   const renderObjectives = () => {
-    if (objectives.length === 0) {
+    if (
+      objectives.length ===
+      0
+    ) {
       return renderEmpty(
         "لا توجد أهداف تعليمية لهذا الدرس.",
       );
@@ -990,13 +1457,17 @@ const AdminDashboard: React.FC = () => {
               <div className="flex items-center gap-3 mb-2">
                 {objective.objective_code && (
                   <span className="text-xs text-amber-400 font-black">
-                    {objective.objective_code}
+                    {
+                      objective.objective_code
+                    }
                   </span>
                 )}
 
                 {objective.cognitive_level && (
                   <span className="text-xs text-slate-500">
-                    {objective.cognitive_level}
+                    {
+                      objective.cognitive_level
+                    }
                   </span>
                 )}
               </div>
@@ -1012,7 +1483,10 @@ const AdminDashboard: React.FC = () => {
   };
 
   const renderVocabulary = () => {
-    if (vocabulary.length === 0) {
+    if (
+      vocabulary.length ===
+      0
+    ) {
       return renderEmpty(
         "لا توجد مفردات لهذا الدرس.",
       );
@@ -1020,41 +1494,51 @@ const AdminDashboard: React.FC = () => {
 
     return (
       <div className="grid gap-3 md:grid-cols-2">
-        {vocabulary.map((item) => (
-          <article
-            key={item.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-          >
-            <h3 className="font-black text-amber-400">
-              {item.term}
-            </h3>
+        {vocabulary.map(
+          (item) => (
+            <article
+              key={item.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+            >
+              <h3 className="font-black text-amber-400">
+                {item.term}
+              </h3>
 
-            {item.definition && (
-              <p className="text-sm text-slate-300 mt-2 leading-6">
-                {item.definition}
-              </p>
-            )}
+              {item.definition && (
+                <p className="text-sm text-slate-300 mt-2 leading-6">
+                  {
+                    item.definition
+                  }
+                </p>
+              )}
 
-            {item.pronunciation && (
-              <p className="text-xs text-slate-500 mt-2">
-                النطق:{" "}
-                {item.pronunciation}
-              </p>
-            )}
+              {item.pronunciation && (
+                <p className="text-xs text-slate-500 mt-2">
+                  النطق:{" "}
+                  {
+                    item.pronunciation
+                  }
+                </p>
+              )}
 
-            {item.example && (
-              <p className="text-xs text-slate-400 mt-2 leading-6">
-                مثال: {item.example}
-              </p>
-            )}
-          </article>
-        ))}
+              {item.example && (
+                <p className="text-xs text-slate-400 mt-2 leading-6">
+                  مثال:{" "}
+                  {item.example}
+                </p>
+              )}
+            </article>
+          ),
+        )}
       </div>
     );
   };
 
   const renderConcepts = () => {
-    if (concepts.length === 0) {
+    if (
+      concepts.length ===
+      0
+    ) {
       return renderEmpty(
         "لا توجد مفاهيم مرتبطة بهذا الدرس.",
       );
@@ -1062,38 +1546,45 @@ const AdminDashboard: React.FC = () => {
 
     return (
       <div className="grid gap-3 md:grid-cols-2">
-        {concepts.map((concept) => (
-          <article
-            key={concept.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="font-black text-slate-100">
-                {concept.name}
-              </h3>
+        {concepts.map(
+          (concept) => (
+            <article
+              key={concept.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-black">
+                  {concept.name}
+                </h3>
 
-              {concept.is_primary && (
-                <span className="text-[10px] font-black text-amber-400">
-                  PRIMARY
-                </span>
+                {concept.is_primary && (
+                  <span className="text-[10px] font-black text-amber-400">
+                    PRIMARY
+                  </span>
+                )}
+              </div>
+
+              {concept.description && (
+                <p className="text-sm text-slate-400 mt-2 leading-6">
+                  {
+                    concept.description
+                  }
+                </p>
               )}
-            </div>
-
-            {concept.description && (
-              <p className="text-sm text-slate-400 mt-2 leading-6">
-                {concept.description}
-              </p>
-            )}
-          </article>
-        ))}
+            </article>
+          ),
+        )}
       </div>
     );
   };
 
   const renderQuestions = () => {
-    if (questions.length === 0) {
+    if (
+      questions.length ===
+      0
+    ) {
       return renderEmpty(
-        "لا توجد أسئلة منشورة مرتبطة بهذا الدرس.",
+        "لا توجد أسئلة مرتبطة بهذا الدرس.",
       );
     }
 
@@ -1105,60 +1596,27 @@ const AdminDashboard: React.FC = () => {
               key={question.id}
               className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
             >
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span className="text-xs font-black text-amber-400">
-                  السؤال {index + 1}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-amber-400 font-black">
+                  Question #{index + 1}
                 </span>
 
                 <span className="text-[10px] text-slate-500">
                   {question.question_type}
                 </span>
-
-                {question.difficulty && (
-                  <span className="text-[10px] text-slate-500">
-                    {question.difficulty}
-                  </span>
-                )}
-
-                {question.status && (
-                  <span className="text-[10px] text-emerald-400">
-                    {question.status}
-                  </span>
-                )}
               </div>
 
-              <p className="text-sm text-slate-100 leading-7">
-                {question.prompt}
+              <p className="text-sm leading-7 mt-3 text-slate-200">
+                {question.question_text}
               </p>
 
-              {question.options.length > 0 && (
-                <div className="mt-4 space-y-2">
-                  {question.options.map(
-                    (option) => (
-                      <div
-                        key={option.id}
-                        className="rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-xs text-slate-300"
-                      >
-                        <strong className="text-amber-400">
-                          {option.option_key}
-                        </strong>{" "}
-                        {option.option_text}
-                      </div>
-                    ),
-                  )}
-                </div>
-              )}
-
               {question.explanation && (
-                <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-4">
-                  <p className="text-[10px] text-slate-500 mb-1">
-                    الشرح
-                  </p>
-
-                  <p className="text-xs text-slate-400 leading-6">
-                    {question.explanation}
-                  </p>
-                </div>
+                <p className="text-xs text-slate-500 mt-3 leading-6">
+                  الشرح:{" "}
+                  {
+                    question.explanation
+                  }
+                </p>
               )}
             </article>
           ),
@@ -1168,74 +1626,86 @@ const AdminDashboard: React.FC = () => {
   };
 
   const renderSources = () => {
-    if (sources.length === 0) {
+    if (
+      sources.length ===
+      0
+    ) {
       return renderEmpty(
         "لا توجد مصادر مرتبطة بهذا الدرس.",
       );
     }
 
     return (
-      <div className="space-y-3">
-        {sources.map((source) => (
-          <article
-            key={source.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
-          >
-            <div className="flex items-center justify-between gap-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        {sources.map(
+          (source) => (
+            <article
+              key={source.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900 p-5"
+            >
               <h3 className="font-black">
-                {source.name}
+                {source.title}
               </h3>
 
-              <span className="text-xs text-amber-400">
-                {source.source_type}
-              </span>
-            </div>
+              {source.author && (
+                <p className="text-xs text-slate-400 mt-2">
+                  المؤلف:{" "}
+                  {source.author}
+                </p>
+              )}
 
-            {source.publisher && (
-              <p className="text-xs text-slate-500 mt-2">
-                الناشر:{" "}
-                {source.publisher}
-              </p>
-            )}
+              {source.publisher && (
+                <p className="text-xs text-slate-500 mt-1">
+                  الناشر:{" "}
+                  {source.publisher}
+                </p>
+              )}
 
-            {source.edition && (
-              <p className="text-xs text-slate-500 mt-1">
-                الإصدار:{" "}
-                {source.edition}
-              </p>
-            )}
+              {source.edition && (
+                <p className="text-xs text-slate-500 mt-1">
+                  الإصدار:{" "}
+                  {source.edition}
+                </p>
+              )}
 
-            {source.academic_year && (
-              <p className="text-xs text-slate-500 mt-1">
-                العام الدراسي:{" "}
-                {source.academic_year}
-              </p>
-            )}
+              {source.academic_year && (
+                <p className="text-xs text-slate-500 mt-1">
+                  العام الدراسي:{" "}
+                  {
+                    source.academic_year
+                  }
+                </p>
+              )}
 
-            {source.source_url && (
-              <a
-                href={source.source_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-block text-xs text-blue-400 hover:text-blue-300 mt-3 break-all"
-              >
-                {source.source_url}
-              </a>
-            )}
+              {source.source_url && (
+                <a
+                  href={
+                    source.source_url
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block text-xs text-blue-400 hover:text-blue-300 mt-3 break-all"
+                >
+                  {source.source_url}
+                </a>
+              )}
 
-            {source.rights_notes && (
-              <p className="text-xs text-slate-500 mt-3 leading-6">
-                الحقوق:{" "}
-                {source.rights_notes}
-              </p>
-            )}
-          </article>
-        ))}
+              {source.rights_notes && (
+                <p className="text-xs text-slate-500 mt-3 leading-6">
+                  الحقوق:{" "}
+                  {
+                    source.rights_notes
+                  }
+                </p>
+              )}
+            </article>
+          ),
+        )}
       </div>
     );
   };
 
-  const renderLessonTab = () => {
+  const renderLesson = () => {
     if (!selectedLesson) {
       return renderEmpty(
         "اختر درسًا من القائمة لبدء إدارة محتواه.",
@@ -1248,11 +1718,16 @@ const AdminDashboard: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
             <div>
               <span className="text-xs font-black text-amber-400">
-                LESSON #{selectedLesson.id}
+                LESSON #
+                {
+                  selectedLesson.id
+                }
               </span>
 
               <h2 className="text-2xl font-black mt-2">
-                {selectedLesson.title}
+                {
+                  selectedLesson.title
+                }
               </h2>
 
               {selectedLesson.content_summary && (
@@ -1274,41 +1749,45 @@ const AdminDashboard: React.FC = () => {
         </section>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <p className="text-xs text-slate-500">
               Lesson Number
             </p>
             <p className="text-2xl font-black text-amber-400 mt-2">
-              {selectedLesson.lesson_number}
+              {
+                selectedLesson.lesson_number
+              }
             </p>
-          </div>
+          </article>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <p className="text-xs text-slate-500">
               Content Blocks
             </p>
             <p className="text-2xl font-black mt-2">
-              {contentBlocks.length}
+              {
+                contentBlocks.length
+              }
             </p>
-          </div>
+          </article>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <p className="text-xs text-slate-500">
               Assets
             </p>
             <p className="text-2xl font-black mt-2">
               {assets.length}
             </p>
-          </div>
+          </article>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
             <p className="text-xs text-slate-500">
               Questions
             </p>
             <p className="text-2xl font-black mt-2">
               {questions.length}
             </p>
-          </div>
+          </article>
         </div>
 
         <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6">
@@ -1333,31 +1812,33 @@ const AdminDashboard: React.FC = () => {
                 value:
                   selectedLesson.game_url,
               },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="rounded-2xl border border-slate-800 bg-slate-950 p-4"
-              >
-                <p className="text-[10px] text-slate-500 font-black">
-                  {item.label}
-                </p>
-
-                {item.value ? (
-                  <a
-                    href={item.value}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block text-xs text-blue-400 hover:text-blue-300 mt-2 break-all"
-                  >
-                    {item.value}
-                  </a>
-                ) : (
-                  <p className="text-xs text-slate-600 mt-2">
-                    غير موجود
+            ].map(
+              (item) => (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-slate-800 bg-slate-950 p-4"
+                >
+                  <p className="text-[10px] text-slate-500 font-black">
+                    {item.label}
                   </p>
-                )}
-              </div>
-            ))}
+
+                  {item.value ? (
+                    <a
+                      href={item.value}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block text-xs text-blue-400 hover:text-blue-300 mt-2 break-all"
+                    >
+                      {item.value}
+                    </a>
+                  ) : (
+                    <p className="text-xs text-slate-600 mt-2">
+                      غير موجود
+                    </p>
+                  )}
+                </div>
+              ),
+            )}
           </div>
         </section>
       </div>
@@ -1365,35 +1846,70 @@ const AdminDashboard: React.FC = () => {
   };
 
   const renderActiveTab = () => {
-    switch (activeTab) {
-      case "lesson":
-        return renderLessonTab();
-
-      case "blocks":
-        return renderBlocks();
-
-      case "assets":
-        return renderAssets();
-
-      case "objectives":
-        return renderObjectives();
-
-      case "vocabulary":
-        return renderVocabulary();
-
-      case "concepts":
-        return renderConcepts();
-
-      case "questions":
-        return renderQuestions();
-
-      case "sources":
-        return renderSources();
-
-      default:
-        return renderLessonTab();
+    if (
+      activeTab === "overview"
+    ) {
+      return renderOverview();
     }
+
+    if (
+      activeTab === "lesson"
+    ) {
+      return renderLesson();
+    }
+
+    if (
+      activeTab === "blocks"
+    ) {
+      return renderBlocks();
+    }
+
+    if (
+      activeTab === "assets"
+    ) {
+      return renderAssets();
+    }
+
+    if (
+      activeTab === "objectives"
+    ) {
+      return renderObjectives();
+    }
+
+    if (
+      activeTab === "vocabulary"
+    ) {
+      return renderVocabulary();
+    }
+
+    if (
+      activeTab === "concepts"
+    ) {
+      return renderConcepts();
+    }
+
+    if (
+      activeTab === "questions"
+    ) {
+      return renderQuestions();
+    }
+
+    return renderSources();
   };
+
+  const connectionLabel =
+    connection === "connected"
+      ? "متصل"
+      : connection === "error"
+        ? "خطأ"
+        : "جاري الفحص";
+
+  const connectionClass =
+    connection === "connected"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+      : connection === "error"
+        ? "border-red-500/30 bg-red-500/10 text-red-400"
+        : "border-amber-500/30 bg-amber-500/10 text-amber-400";
 
   return (
     <main
@@ -1401,23 +1917,20 @@ const AdminDashboard: React.FC = () => {
       className="min-h-screen bg-slate-950 text-slate-100"
     >
       <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8">
-
-        {/* Header */}
-
         <header className="mb-7">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
             <div>
               <span className="inline-flex rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-black text-amber-400">
-                ADMIN CONTENT MANAGEMENT
+                ADMIN DASHBOARD
               </span>
 
               <h1 className="text-3xl md:text-4xl font-black mt-3">
-                إدارة المحتوى التعليمي
+                لوحة الإدارة
               </h1>
 
               <p className="text-sm text-slate-500 mt-2 leading-7 max-w-3xl">
-                إدارة واستعراض المنهج والمحتوى المرتبط
-                بالدروس من المصدر الأساسي للبيانات.
+                مراقبة حالة المنصة وإحصائيات المحتوى وإدارة
+                المحتوى التعليمي من خلال الـAdmin API.
               </p>
             </div>
 
@@ -1432,17 +1945,22 @@ const AdminDashboard: React.FC = () => {
               <button
                 type="button"
                 onClick={() =>
-                  void checkConnection()
+                  void refreshAdminData()
                 }
-                className={`rounded-xl border px-4 py-2 text-xs font-black ${connectionClass}`}
+                disabled={
+                  dashboardLoading ||
+                  diagnosticsLoading
+                }
+                className={`rounded-xl border px-4 py-2 text-xs font-black ${connectionClass} disabled:opacity-50`}
               >
-                {connectionLabel}
+                {dashboardLoading ||
+                diagnosticsLoading
+                  ? "جاري التحديث..."
+                  : connectionLabel}
               </button>
             </div>
           </div>
         </header>
-
-        {/* Server status */}
 
         <section
           className={`rounded-2xl border px-5 py-4 mb-6 ${connectionClass}`}
@@ -1450,228 +1968,29 @@ const AdminDashboard: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
               <p className="text-xs font-black">
-                اتصال الـBackend
+                حالة الـBackend وقاعدة البيانات
               </p>
 
               <p className="text-xs opacity-80 mt-1">
-                {connection ===
-                "connected"
-                  ? "الخدمة متاحة."
-                  : connection === "error"
-                    ? "تعذر الوصول إلى الخدمة."
-                    : "جاري التحقق من الخدمة..."}
+                {diagnostics.status ===
+                "healthy"
+                  ? "كل الاختبارات الأساسية ناجحة."
+                  : diagnostics.summary
+                      .total ===
+                    0
+                    ? "لم يتم تشغيل الفحص بعد."
+                    : "يوجد اختبار أو أكثر يحتاج إلى مراجعة."}
               </p>
             </div>
 
             {lastChecked && (
               <span className="text-[10px] opacity-60">
-                آخر اختبار:{" "}
+                آخر فحص:{" "}
                 {lastChecked}
               </span>
             )}
           </div>
         </section>
-
-        {/* Curriculum selector */}
-
-        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 md:p-6 mb-6">
-          <div className="flex items-center justify-between gap-3 mb-5">
-            <div>
-              <h2 className="font-black">
-                اختيار المحتوى
-              </h2>
-
-              <p className="text-xs text-slate-500 mt-1">
-                Grade → Term → Subject → Unit → Lesson
-              </p>
-            </div>
-
-            {loading && (
-              <span className="text-xs text-amber-400 animate-pulse">
-                جاري التحميل...
-              </span>
-            )}
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-
-            <select
-              value={selectedGradeId ?? ""}
-              onChange={(event) =>
-                void handleGradeChange(
-                  Number(event.target.value),
-                )
-              }
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none focus:border-amber-500"
-            >
-              <option value="">
-                اختر الصف
-              </option>
-
-              {grades.map((grade) => (
-                <option
-                  key={grade.id}
-                  value={grade.id}
-                >
-                  {grade.title}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={selectedTermId ?? ""}
-              onChange={(event) =>
-                void handleTermChange(
-                  Number(event.target.value),
-                )
-              }
-              disabled={terms.length === 0}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
-            >
-              <option value="">
-                اختر الفصل
-              </option>
-
-              {terms.map((term) => (
-                <option
-                  key={term.id}
-                  value={term.id}
-                >
-                  {term.title}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={
-                selectedSubjectId ?? ""
-              }
-              onChange={(event) =>
-                void handleSubjectChange(
-                  Number(event.target.value),
-                )
-              }
-              disabled={
-                subjects.length === 0
-              }
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
-            >
-              <option value="">
-                اختر المادة
-              </option>
-
-              {subjects.map(
-                (subject) => (
-                  <option
-                    key={subject.id}
-                    value={subject.id}
-                  >
-                    {subject.title}
-                  </option>
-                ),
-              )}
-            </select>
-
-            <select
-              value={
-                selectedUnitId ?? ""
-              }
-              onChange={(event) =>
-                void handleUnitChange(
-                  Number(event.target.value),
-                )
-              }
-              disabled={units.length === 0}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
-            >
-              <option value="">
-                اختر الوحدة
-              </option>
-
-              {units.map((unit) => (
-                <option
-                  key={unit.id}
-                  value={unit.id}
-                >
-                  {unit.unit_number}.{" "}
-                  {unit.title}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={
-                selectedLessonId ?? ""
-              }
-              onChange={(event) => {
-                const id = Number(
-                  event.target.value,
-                );
-
-                const lesson =
-                  lessons.find(
-                    (item) =>
-                      item.id === id,
-                  );
-
-                if (lesson) {
-                  openLesson(lesson);
-                }
-              }}
-              disabled={lessons.length === 0}
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
-            >
-              <option value="">
-                اختر الدرس
-              </option>
-
-              {lessons.map(
-                (lesson) => (
-                  <option
-                    key={lesson.id}
-                    value={lesson.id}
-                  >
-                    {lesson.lesson_number}.{" "}
-                    {lesson.title}
-                  </option>
-                ),
-              )}
-            </select>
-          </div>
-
-          {(selectedGrade ||
-            selectedTerm ||
-            selectedSubject ||
-            selectedUnit) && (
-            <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-slate-800">
-              {selectedGrade && (
-                <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
-                  {selectedGrade.title}
-                </span>
-              )}
-
-              {selectedTerm && (
-                <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
-                  {selectedTerm.title}
-                </span>
-              )}
-
-              {selectedSubject && (
-                <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
-                  {selectedSubject.title}
-                </span>
-              )}
-
-              {selectedUnit && (
-                <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
-                  {selectedUnit.title}
-                </span>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Error */}
 
         {error && (
           <section
@@ -1688,193 +2007,333 @@ const AdminDashboard: React.FC = () => {
           </section>
         )}
 
-        {/* Stats */}
-
-        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-          {contentStats.map(
-            (stat) => (
-              <div
-                key={stat.label}
-                className="rounded-2xl border border-slate-800 bg-slate-900 p-4"
-              >
-                <div className="text-xl">
-                  {stat.icon}
-                </div>
-
-                <p className="text-[10px] text-slate-500 mt-3">
-                  {stat.label}
-                </p>
-
-                <p className="text-xl font-black text-slate-100 mt-1">
-                  {stat.value}
-                </p>
-              </div>
-            ),
-          )}
-        </section>
-
-        {/* Lessons list */}
-
-        <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 md:p-6 mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-            <div>
-              <h2 className="font-black">
-                دروس الوحدة
-              </h2>
-
-              <p className="text-xs text-slate-500 mt-1">
-                اختر الدرس لفتح لوحة إدارة مكوناته.
-              </p>
-            </div>
-
-            <span className="text-xs text-slate-500">
-              {lessons.length} درس
-            </span>
-          </div>
-
-          {lessons.length === 0 ? (
-            renderEmpty(
-              "لا توجد دروس في الوحدة المحددة.",
-            )
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {lessons.map(
-                (lesson) => {
-                  const active =
-                    selectedLessonId ===
-                    lesson.id;
-
-                  return (
-                    <button
-                      key={lesson.id}
-                      type="button"
-                      onClick={() =>
-                        openLesson(lesson)
-                      }
-                      className={`text-right rounded-2xl border p-5 transition ${
-                        active
-                          ? "border-amber-500/60 bg-amber-500/10"
-                          : "border-slate-800 bg-slate-950 hover:border-slate-700"
-                      }`}
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 shrink-0 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black">
-                          {
-                            lesson.lesson_number
-                          }
-                        </div>
-
-                        <div className="min-w-0">
-                          <h3 className="font-black text-sm">
-                            {lesson.title}
-                          </h3>
-
-                          {lesson.content_summary && (
-                            <p className="text-xs text-slate-500 mt-2 leading-6 line-clamp-2">
-                              {
-                                lesson.content_summary
-                              }
-                            </p>
-                          )}
-
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {lesson.video_url && (
-                              <span className="text-[9px] text-blue-400">
-                                VIDEO
-                              </span>
-                            )}
-
-                            {lesson.infographic_url && (
-                              <span className="text-[9px] text-purple-400">
-                                INFOGRAPHIC
-                              </span>
-                            )}
-
-                            {lesson.game_url && (
-                              <span className="text-[9px] text-emerald-400">
-                                GAME
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                },
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Lesson content */}
-
-        {selectedLesson && (
-          <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 md:p-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-              <div>
-                <h2 className="text-xl font-black">
-                  {selectedLesson.title}
-                </h2>
-
-                <p className="text-xs text-slate-500 mt-1">
-                  إدارة مكونات المحتوى
-                </p>
-              </div>
-
-              {lessonLoading && (
-                <span className="text-xs text-amber-400 animate-pulse">
-                  جاري تحميل مكونات الدرس...
-                </span>
-              )}
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-3 mb-6 border-b border-slate-800">
-              {tabs.map((tab) => (
+        <nav className="rounded-2xl border border-slate-800 bg-slate-900 p-2 mb-6 overflow-x-auto">
+          <div className="flex gap-2 min-w-max">
+            {tabs.map(
+              (tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() =>
-                    setActiveTab(tab.id)
+                    setActiveTab(
+                      tab.id,
+                    )
                   }
-                  className={`shrink-0 rounded-xl px-4 py-2 text-xs font-black transition ${
-                    activeTab === tab.id
+                  className={`rounded-xl px-4 py-3 text-xs font-black transition ${
+                    activeTab ===
+                    tab.id
                       ? "bg-amber-500 text-slate-950"
-                      : "bg-slate-950 text-slate-400 hover:text-slate-200"
+                      : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
                   }`}
                 >
                   {tab.label}
 
-                  {tab.count !==
-                    undefined && (
+                  {typeof tab.count ===
+                    "number" && (
                     <span className="mr-2 opacity-70">
                       {tab.count}
                     </span>
                   )}
                 </button>
-              ))}
+              ),
+            )}
+          </div>
+        </nav>
+
+        {activeTab !==
+          "overview" && (
+          <section className="rounded-3xl border border-slate-800 bg-slate-900 p-5 md:p-6 mb-6">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div>
+                <h2 className="font-black">
+                  اختيار المحتوى
+                </h2>
+
+                <p className="text-xs text-slate-500 mt-1">
+                  Grade → Term → Subject → Unit → Lesson
+                </p>
+              </div>
+
+              {loading && (
+                <span className="text-xs text-amber-400">
+                  جاري التحميل...
+                </span>
+              )}
             </div>
 
-            {renderActiveTab()}
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <select
+                value={
+                  selectedGradeId ??
+                  ""
+                }
+                onChange={(event) => {
+                  const id =
+                    Number(
+                      event.target
+                        .value,
+                    );
+
+                  if (id) {
+                    void handleGradeChange(
+                      id,
+                    );
+                  }
+                }}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none focus:border-amber-500"
+              >
+                <option value="">
+                  اختر الصف
+                </option>
+
+                {grades.map(
+                  (grade) => (
+                    <option
+                      key={grade.id}
+                      value={grade.id}
+                    >
+                      {grade.title}
+                    </option>
+                  ),
+                )}
+              </select>
+
+              <select
+                value={
+                  selectedTermId ??
+                  ""
+                }
+                onChange={(event) => {
+                  const id =
+                    Number(
+                      event.target
+                        .value,
+                    );
+
+                  if (id) {
+                    void handleTermChange(
+                      id,
+                    );
+                  }
+                }}
+                disabled={
+                  terms.length === 0
+                }
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
+              >
+                <option value="">
+                  اختر الفصل
+                </option>
+
+                {terms.map(
+                  (term) => (
+                    <option
+                      key={term.id}
+                      value={term.id}
+                    >
+                      {term.title}
+                    </option>
+                  ),
+                )}
+              </select>
+
+              <select
+                value={
+                  selectedSubjectId ??
+                  ""
+                }
+                onChange={(event) => {
+                  const id =
+                    Number(
+                      event.target
+                        .value,
+                    );
+
+                  if (id) {
+                    void handleSubjectChange(
+                      id,
+                    );
+                  }
+                }}
+                disabled={
+                  subjects.length ===
+                  0
+                }
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
+              >
+                <option value="">
+                  اختر المادة
+                </option>
+
+                {subjects.map(
+                  (subject) => (
+                    <option
+                      key={
+                        subject.id
+                      }
+                      value={
+                        subject.id
+                      }
+                    >
+                      {
+                        subject.title
+                      }
+                    </option>
+                  ),
+                )}
+              </select>
+
+              <select
+                value={
+                  selectedUnitId ??
+                  ""
+                }
+                onChange={(event) => {
+                  const id =
+                    Number(
+                      event.target
+                        .value,
+                    );
+
+                  if (id) {
+                    void handleUnitChange(
+                      id,
+                    );
+                  }
+                }}
+                disabled={
+                  units.length ===
+                  0
+                }
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
+              >
+                <option value="">
+                  اختر الوحدة
+                </option>
+
+                {units.map(
+                  (unit) => (
+                    <option
+                      key={unit.id}
+                      value={unit.id}
+                    >
+                      {
+                        unit.unit_number
+                      }
+                      .{" "}
+                      {
+                        unit.title
+                      }
+                    </option>
+                  ),
+                )}
+              </select>
+
+              <select
+                value={
+                  selectedLessonId ??
+                  ""
+                }
+                onChange={(event) => {
+                  const id =
+                    Number(
+                      event.target
+                        .value,
+                    );
+
+                  if (!id) {
+                    return;
+                  }
+
+                  void loadLesson(
+                    id,
+                  );
+                }}
+                disabled={
+                  lessons.length ===
+                  0
+                }
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm outline-none disabled:opacity-40 focus:border-amber-500"
+              >
+                <option value="">
+                  اختر الدرس
+                </option>
+
+                {lessons.map(
+                  (lesson) => (
+                    <option
+                      key={
+                        lesson.id
+                      }
+                      value={
+                        lesson.id
+                      }
+                    >
+                      {
+                        lesson.lesson_number
+                      }
+                      .{" "}
+                      {
+                        lesson.title
+                      }
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+
+            {(selectedGrade ||
+              selectedTerm ||
+              selectedSubject ||
+              selectedUnit) && (
+              <div className="flex flex-wrap gap-2 mt-5 pt-5 border-t border-slate-800">
+                {selectedGrade && (
+                  <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
+                    {
+                      selectedGrade.title
+                    }
+                  </span>
+                )}
+
+                {selectedTerm && (
+                  <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
+                    {
+                      selectedTerm.title
+                    }
+                  </span>
+                )}
+
+                {selectedSubject && (
+                  <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
+                    {
+                      selectedSubject.title
+                    }
+                  </span>
+                )}
+
+                {selectedUnit && (
+                  <span className="rounded-full bg-slate-950 border border-slate-800 px-3 py-1 text-[10px] text-slate-400">
+                    {
+                      selectedUnit.title
+                    }
+                  </span>
+                )}
+              </div>
+            )}
           </section>
         )}
 
-        {/* Current architecture notice */}
+        {lessonLoading && (
+          <section className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 mb-6">
+            <p className="text-sm text-amber-400 font-black">
+              جاري تحميل بيانات الدرس...
+            </p>
+          </section>
+        )}
 
-        <section className="mt-6 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
-          <p className="text-xs font-black text-blue-400">
-            ملاحظة هندسية
-          </p>
-
-          <p className="text-xs text-slate-400 mt-2 leading-7">
-            هذه الشاشة تستخدم الـAPI الحالي لعرض وإدارة
-            بنية المحتوى دون الاتصال المباشر بقاعدة البيانات
-            من الـFrontend. عمليات الإنشاء والتعديل والحذف
-            ستُضاف بعد تجهيز Admin CRUD API في الـBackend،
-            حتى لا نضع endpoints وهمية أو نعيد استخدام جداول
-            الـlegacy.
-          </p>
+        <section>
+          {renderActiveTab()}
         </section>
-
       </div>
     </main>
   );
