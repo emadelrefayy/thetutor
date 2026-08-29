@@ -1527,57 +1527,64 @@ async def create_game_session(
             detail="Game definition not found.",
         )
 
-    sessions = await supabase_request(
-        "POST",
-        "game_sessions",
-        payload={
-            "student_profile_id": student_profile_id,
-            "game_definition_id": data.game_definition_id,
-            "started_at": now_iso(),
-            "status": "started",
-            "score": 0,
-            "max_score": 0,
-            "accuracy": None,
-            "xp_earned": 0,
-            "metadata": {},
-        },
-        authorization=auth,
-    )
+    try:
+        result = await supabase_request(
+            "POST",
+            "rpc/start_game",
+            payload={
+                "p_student_profile_id": student_profile_id,
+                "p_game_definition_id": data.game_definition_id,
+                "p_question_count": 10,
+            },
+            privileged=True,
+        )
+    except HTTPException as exc:
+        detail = exc.detail
 
-    if not sessions:
+        if isinstance(detail, dict):
+            response_data = detail.get("response")
+
+            if isinstance(response_data, dict):
+                message = str(
+                    response_data.get("message", "")
+                )
+
+                if "no_eligible_questions" in message:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "لا توجد أسئلة مؤهلة من الدروس "
+                            "المكتملة لهذا الطالب."
+                        ),
+                    )
+
+        raise
+
+    if isinstance(result, str):
+        session_id = result
+    elif (
+        isinstance(result, list)
+        and result
+        and isinstance(result[0], str)
+    ):
+        session_id = result[0]
+    else:
         raise HTTPException(
             status_code=502,
             detail="Could not create game session.",
         )
 
-    session = sessions[0]
-
-    questions = await supabase_request(
-        "GET",
-        "game_definition_questions",
-        params={
-            "game_definition_id": (
-                f"eq.{data.game_definition_id}"
-            ),
-            "select": (
-                "question_id,sort_order,points"
-            ),
-            "order": "sort_order.asc",
-        },
-        authorization=auth,
+    session = await get_one(
+        "game_sessions",
+        session_id,
+        select="*",
+        privileged=True,
     )
 
-    for question in questions:
-        await supabase_request(
-            "POST",
-            "game_session_questions",
-            payload={
-                "session_id": session["id"],
-                "question_id": question["question_id"],
-                "sequence_no": question["sort_order"],
-                "points_possible": question["points"],
-            },
-            authorization=auth,
+    if session["student_profile_id"] != student_profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied.",
         )
 
     return session
