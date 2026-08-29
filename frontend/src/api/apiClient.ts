@@ -1788,14 +1788,6 @@ async function getAdminMe(
   return get<AdminProfile>("/admin/me", token);
 }
 
-async function getAdminContentOverview(
-  token?: string | null,
-): Promise<AdminContentOverview> {
-  return get<AdminContentOverview>(
-    "/admin/content/overview",
-    token,
-  );
-}
 async function getAdminDashboard(
   token?: string | null,
 ): Promise<AdminDashboardResponse> {
@@ -2319,7 +2311,6 @@ export const apiClient = {
 
   /* Admin */
     getAdminMe,
-  getAdminContentOverview,
   getAdminDashboard,
   getAdminDiagnostics,
 
