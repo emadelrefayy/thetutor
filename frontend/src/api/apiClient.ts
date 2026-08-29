@@ -2325,8 +2325,10 @@ export const apiClient = {
   getMessages,
 
   /* Admin */
-  getAdminMe,
+    getAdminMe,
   getAdminContentOverview,
+  getAdminDashboard,
+  getAdminDiagnostics,
 
   adminCreateLesson,
   adminUpdateLesson,
