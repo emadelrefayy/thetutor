@@ -2134,8 +2134,8 @@ async function adminAttachSource(
     notes?: string | null;
   },
   token?: string | null,
-): Promise<CurriculumSource> {
-  return post<CurriculumSource>(
+): Promise<LessonSourceRef> {
+  return post<LessonSourceRef>(
     `/admin/lessons/${lessonId}/sources/${encodeURIComponent(
       sourceId,
     )}`,
