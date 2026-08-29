@@ -200,6 +200,10 @@ export interface Question {
   options: QuestionOption[];
 }
 
+/* =====================================================================
+ * Student
+ * ===================================================================== */
+
 export interface StudentProfile {
   profile_id: string;
   grade_id?: number | null;
@@ -217,11 +221,7 @@ export interface LessonProgress {
   id: string;
   student_profile_id: string;
   lesson_id: number;
-  status:
-    | "not_started"
-    | "in_progress"
-    | "completed"
-    | string;
+  status: "not_started" | "in_progress" | "completed" | string;
   completion_percent: number;
   first_started_at?: string | null;
   completed_at?: string | null;
@@ -340,6 +340,10 @@ export interface Achievement {
   metadata?: Record<string, unknown> | null;
 }
 
+/* =====================================================================
+ * Parent
+ * ===================================================================== */
+
 export interface ParentInvitation {
   id: string;
   student_profile_id: string;
@@ -375,17 +379,19 @@ export interface ParentStudent {
 }
 
 /* =====================================================================
- * Gamification / Games
+ * Canonical Games
+ *
+ * IMPORTANT:
+ * The legacy `Game` type and `/games` contract were intentionally
+ * removed. The database source of truth is now:
+ *
+ * game_templates
+ *   -> game_definitions
+ *   -> game_definition_questions
+ *   -> game_sessions
+ *   -> game_session_questions
+ *   -> question_attempts
  * ===================================================================== */
-
-export interface Game {
-  id: number;
-  lesson_id?: number | null;
-  game_type: string;
-  title?: string | null;
-  game_data: Record<string, unknown>;
-  created_at?: string | null;
-}
 
 export interface GameTemplate {
   id: string;
@@ -436,11 +442,7 @@ export interface GameSession {
   game_definition_id: string;
   started_at?: string | null;
   completed_at?: string | null;
-  status:
-    | "started"
-    | "completed"
-    | "abandoned"
-    | string;
+  status: "started" | "completed" | "abandoned" | string;
   score: number;
   max_score: number;
   accuracy?: number | null;
@@ -468,6 +470,10 @@ export interface QuestionAttempt {
   answered_at?: string | null;
   feedback: Record<string, unknown>;
 }
+
+/* =====================================================================
+ * Challenges
+ * ===================================================================== */
 
 export interface Challenge {
   id: string;
@@ -545,11 +551,7 @@ export interface CourseEnrollment {
   id: string;
   course_id: string;
   student_profile_id: string;
-  status:
-    | "active"
-    | "completed"
-    | "cancelled"
-    | string;
+  status: "active" | "completed" | "cancelled" | string;
   enrolled_at?: string | null;
   completed_at?: string | null;
 }
@@ -819,19 +821,11 @@ function buildUrl(
   );
 
   if (query) {
-    Object.entries(query).forEach(
-      ([key, value]) => {
-        if (
-          value !== undefined &&
-          value !== null
-        ) {
-          url.searchParams.set(
-            key,
-            String(value),
-          );
-        }
-      },
-    );
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        url.searchParams.set(key, String(value));
+      }
+    });
   }
 
   return url.toString();
@@ -847,9 +841,7 @@ async function resolveAccessToken(
       return null;
     }
 
-    return normalized
-      .toLowerCase()
-      .startsWith("bearer ")
+    return normalized.toLowerCase().startsWith("bearer ")
       ? normalized.slice(7).trim()
       : normalized;
   }
@@ -862,8 +854,7 @@ async function resolveAccessToken(
   if (error) {
     throw {
       status: 401,
-      message:
-        "تعذر الحصول على جلسة تسجيل الدخول.",
+      message: "تعذر الحصول على جلسة تسجيل الدخول.",
       details: error,
     } satisfies ApiError;
   }
@@ -886,7 +877,6 @@ async function parseResponse(
   }
 
   const text = await response.text();
-
   return text || null;
 }
 
@@ -900,9 +890,7 @@ function getErrorMessage(
     "detail" in data
   ) {
     const detail = (
-      data as {
-        detail?: unknown;
-      }
+      data as { detail?: unknown }
     ).detail;
 
     if (typeof detail === "string") {
@@ -942,15 +930,9 @@ async function request<T>(
 
   const headers = new Headers(customHeaders);
 
-  headers.set(
-    "Accept",
-    "application/json",
-  );
+  headers.set("Accept", "application/json");
 
-  if (
-    body !== undefined &&
-    body !== null
-  ) {
+  if (body !== undefined && body !== null) {
     headers.set(
       "Content-Type",
       "application/json",
@@ -978,14 +960,12 @@ async function request<T>(
   } catch (error) {
     throw {
       status: 0,
-      message:
-        "تعذر الاتصال بخادم التطبيق.",
+      message: "تعذر الاتصال بخادم التطبيق.",
       details: error,
     } satisfies ApiError;
   }
 
-  const data =
-    await parseResponse(response);
+  const data = await parseResponse(response);
 
   if (!response.ok) {
     throw {
@@ -1083,10 +1063,7 @@ async function del<T>(
 async function health(
   token?: string | null,
 ): Promise<HealthResponse> {
-  return get<HealthResponse>(
-    "/health",
-    token,
-  );
+  return get<HealthResponse>("/health", token);
 }
 
 /* =====================================================================
@@ -1435,8 +1412,7 @@ async function createParentInvitation(
     undefined,
     token,
     {
-      student_profile_id:
-        studentProfileId,
+      student_profile_id: studentProfileId,
     },
   );
 }
@@ -1543,8 +1519,7 @@ async function createGameSession(
       studentProfileId,
     )}/game-sessions`,
     {
-      game_definition_id:
-        gameDefinitionId,
+      game_definition_id: gameDefinitionId,
     },
     token,
   );
@@ -1674,10 +1649,7 @@ async function joinChallenge(
 async function getCourses(
   token?: string | null,
 ): Promise<Course[]> {
-  return get<Course[]>(
-    "/courses",
-    token,
-  );
+  return get<Course[]>("/courses", token);
 }
 
 async function getCourse(
@@ -1727,8 +1699,7 @@ async function getCourseEnrollment(
     )}/enrollment`,
     token,
     {
-      student_profile_id:
-        studentProfileId,
+      student_profile_id: studentProfileId,
     },
   );
 }
@@ -1745,8 +1716,7 @@ async function getConversations(
     "/conversations",
     token,
     {
-      student_profile_id:
-        studentProfileId,
+      student_profile_id: studentProfileId,
     },
   );
 }
@@ -1762,8 +1732,7 @@ async function getMessages(
     )}/messages`,
     token,
     {
-      student_profile_id:
-        studentProfileId,
+      student_profile_id: studentProfileId,
     },
   );
 }
@@ -1775,10 +1744,7 @@ async function getMessages(
 async function getAdminMe(
   token?: string | null,
 ): Promise<AdminProfile> {
-  return get<AdminProfile>(
-    "/admin/me",
-    token,
-  );
+  return get<AdminProfile>("/admin/me", token);
 }
 
 async function getAdminContentOverview(
@@ -2129,10 +2095,8 @@ async function adminAttachSource(
     undefined,
     token,
     {
-      locator:
-        options?.locator ?? null,
-      notes:
-        options?.notes ?? null,
+      locator: options?.locator ?? null,
+      notes: options?.notes ?? null,
     },
   );
 }
