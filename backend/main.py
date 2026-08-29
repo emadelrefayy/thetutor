@@ -2395,44 +2395,6 @@ async def admin_me(
     return profile
 
 
-@app.get("/api/admin/content/overview")
-async def admin_content_overview(
-    authorization: str | None = Header(default=None),
-):
-    await require_admin(authorization)
-
-    tables = [
-        "grades",
-        "terms",
-        "subjects",
-        "units",
-        "lessons",
-        "lesson_content_blocks",
-        "lesson_assets",
-        "learning_objectives",
-        "lesson_vocabulary",
-        "concepts",
-        "questions",
-        "curriculum_sources",
-        "game_templates",
-        "game_definitions",
-    ]
-
-    result: dict[str, int] = {}
-
-    for table in tables:
-        rows = await supabase_request(
-            "GET",
-            table,
-            params={
-                "select": "id",
-            },
-            privileged=True,
-        )
-
-        result[table] = len(rows)
-
-    return result
 
 # ---------------------------------------------------------------------
 # Admin dashboard
