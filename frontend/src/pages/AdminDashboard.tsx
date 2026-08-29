@@ -1607,7 +1607,7 @@ const AdminDashboard: React.FC = () => {
               </div>
 
               <p className="text-sm leading-7 mt-3 text-slate-200">
-                {question.question_text}
+                {question.prompt}
               </p>
 
               {question.explanation && (
