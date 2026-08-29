@@ -75,16 +75,14 @@ const getText = (
   }
 
   if (isRecord(value)) {
-    const preferredKeys = [
+    for (const key of [
       "text",
       "body",
       "content",
       "description",
       "statement",
       "value",
-    ];
-
-    for (const key of preferredKeys) {
+    ]) {
       const result = getText(value[key]);
 
       if (result) {
@@ -183,14 +181,8 @@ const blockLabel = (
     case "vocabulary":
       return "مفردات";
 
-    case "activity":
-      return "نشاط";
-
     case "quiz":
       return "تدريب";
-
-    case "game":
-      return "لعبة";
 
     case "image":
       return "صورة";
@@ -209,36 +201,6 @@ const blockLabel = (
 
     default:
       return "محتوى";
-  }
-};
-
-const assetIcon = (
-  type: string,
-): string => {
-  switch (type) {
-    case "image":
-      return "🖼️";
-
-    case "infographic":
-      return "📊";
-
-    case "video":
-      return "🎬";
-
-    case "audio":
-      return "🔊";
-
-    case "document":
-      return "📄";
-
-    case "game":
-      return "🎮";
-
-    case "external":
-      return "🔗";
-
-    default:
-      return "📎";
   }
 };
 
@@ -324,7 +286,9 @@ const isYoutubeOrVimeo = (
   return (
     value.includes("youtube.com/watch") ||
     value.includes("youtu.be/") ||
-    value.includes("youtube-nocookie.com/embed") ||
+    value.includes(
+      "youtube-nocookie.com/embed",
+    ) ||
     value.includes("vimeo.com/")
   );
 };
@@ -349,8 +313,7 @@ const videoEmbedUrl = (
     }
 
     if (
-      parsed.hostname ===
-      "youtu.be"
+      parsed.hostname === "youtu.be"
     ) {
       const id =
         parsed.pathname
@@ -462,7 +425,10 @@ const LessonPage: React.FC = () => {
 
     const id = Number(lessonId);
 
-    if (!Number.isInteger(id) || id <= 0) {
+    if (
+      !Number.isInteger(id) ||
+      id <= 0
+    ) {
       setError("معرف الدرس غير صالح.");
       setLoading(false);
       return;
@@ -504,41 +470,49 @@ const LessonPage: React.FC = () => {
         }
 
         setLesson(lessonData);
+
         setContent(
           Array.isArray(contentData)
             ? contentData
             : [],
         );
+
         setAssets(
           Array.isArray(assetsData)
             ? assetsData
             : [],
         );
+
         setObjectives(
           Array.isArray(objectivesData)
             ? objectivesData
             : [],
         );
+
         setVocabulary(
           Array.isArray(vocabularyData)
             ? vocabularyData
             : [],
         );
+
         setConcepts(
           Array.isArray(conceptsData)
             ? conceptsData
             : [],
         );
+
         setSources(
           Array.isArray(sourcesData)
             ? sourcesData
             : [],
         );
+
         setQuestions(
           Array.isArray(questionsData)
             ? questionsData
             : [],
         );
+
         setGames(
           Array.isArray(gamesData)
             ? gamesData
@@ -591,6 +565,18 @@ const LessonPage: React.FC = () => {
   ) => {
     const type =
       block.block_type || "text";
+
+    /*
+     * الألعاب ليست Content Blocks.
+     * GameDefinitions تُعرض في القسم المستقل
+     * أسفل محتوى الدرس.
+     */
+    if (
+      type === "game" ||
+      type === "activity"
+    ) {
+      return null;
+    }
 
     const asset = block.asset_id
       ? assetsById.get(
@@ -873,58 +859,6 @@ const LessonPage: React.FC = () => {
       }
     }
 
-    if (
-      type === "game" ||
-      type === "activity"
-    ) {
-      return (
-        <article
-          key={block.id}
-          className="rounded-2xl border border-amber-500/20 bg-slate-900 p-5 shadow-lg"
-        >
-          <div className="flex items-start gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-xl">
-              {type === "game"
-                ? "🎮"
-                : "🎯"}
-            </span>
-
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-slate-500">
-                {blockLabel(type)}
-              </p>
-
-              <h3 className="mt-1 text-lg font-black text-slate-100">
-                {heading ??
-                  (type === "game"
-                    ? "لعبة تعليمية"
-                    : "نشاط تعليمي")}
-              </h3>
-
-              {text && (
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-400">
-                  {text}
-                </p>
-              )}
-
-              {url && (
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 inline-flex rounded-xl bg-amber-500 px-5 py-3 font-black text-slate-950 transition-colors hover:bg-amber-400"
-                >
-                  {type === "game"
-                    ? "بدء اللعبة 🎮"
-                    : "فتح النشاط ↗"}
-                </a>
-              )}
-            </div>
-          </div>
-        </article>
-      );
-    }
-
     return (
       <article
         key={block.id}
@@ -961,9 +895,7 @@ const LessonPage: React.FC = () => {
         )}
 
         {!text &&
-          isRecord(
-            block.content,
-          ) && (
+          isRecord(block.content) && (
             <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs text-slate-400">
               {JSON.stringify(
                 block.content,
@@ -1026,7 +958,8 @@ const LessonPage: React.FC = () => {
     );
   }
 
-  const hasGames = games.length > 0;
+  const hasGames =
+    games.length > 0;
 
   const hasContent =
     content.length > 0 ||
@@ -1086,3 +1019,356 @@ const LessonPage: React.FC = () => {
               {lesson.content_summary}
             </p>
           )}
+        </header>
+
+        {/* Lesson-level media */}
+
+        {(lesson.video_url ||
+          lesson.infographic_url) && (
+          <section className="space-y-4">
+            {lesson.infographic_url && (
+              <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="text-xl">
+                    📊
+                  </span>
+
+                  <h2 className="font-black text-amber-400">
+                    إنفوجراف الدرس
+                  </h2>
+                </div>
+
+                <img
+                  src={
+                    lesson.infographic_url
+                  }
+                  alt="إنفوجراف الدرس"
+                  loading="lazy"
+                  className="max-h-[650px] w-full rounded-xl border border-slate-800 object-contain"
+                />
+              </article>
+            )}
+
+            {lesson.video_url && (
+              <article className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="text-xl">
+                    🎬
+                  </span>
+
+                  <h2 className="font-black text-amber-400">
+                    فيديو الدرس
+                  </h2>
+                </div>
+
+                {isYoutubeOrVimeo(
+                  lesson.video_url,
+                ) ? (
+                  <div className="aspect-video overflow-hidden rounded-xl border border-slate-800 bg-black">
+                    <iframe
+                      src={videoEmbedUrl(
+                        lesson.video_url,
+                      )}
+                      title="فيديو الدرس"
+                      className="h-full w-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <video
+                    controls
+                    preload="metadata"
+                    src={lesson.video_url}
+                    className="w-full rounded-xl bg-black"
+                  >
+                    متصفحك لا يدعم تشغيل
+                    الفيديو.
+                  </video>
+                )}
+              </article>
+            )}
+          </section>
+        )}
+
+        {/* Lesson content */}
+
+        {content.length > 0 && (
+          <section className="space-y-4">
+            <div>
+              <h2 className="text-2xl font-black text-amber-400">
+                محتوى الدرس
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                شرح ومحتوى الدرس الأساسي.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {content.map(
+                (block, index) =>
+                  renderBlock(
+                    block,
+                    index,
+                  ),
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Objectives */}
+
+        {objectives.length > 0 && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
+            <h2 className="text-2xl font-black text-amber-400">
+              أهداف التعلم
+            </h2>
+
+            <div className="mt-4 space-y-3">
+              {objectives.map(
+                (objective, index) => (
+                  <div
+                    key={
+                      objective.id ??
+                      index
+                    }
+                    className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-slate-300"
+                  >
+                    {getText(objective) ??
+                      JSON.stringify(
+                        objective,
+                      )}
+                  </div>
+                ),
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Vocabulary */}
+
+        {vocabulary.length > 0 && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
+            <h2 className="text-2xl font-black text-amber-400">
+              المفردات
+            </h2>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {vocabulary.map(
+                (item, index) => (
+                  <div
+                    key={
+                      item.id ??
+                      index
+                    }
+                    className="rounded-xl border border-slate-800 bg-slate-950 p-4"
+                  >
+                    <p className="font-bold text-slate-200">
+                      {getHeading(item) ??
+                        `مفردة ${index + 1}`}
+                    </p>
+
+                    {getText(item) && (
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-400">
+                        {getText(item)}
+                      </p>
+                    )}
+                  </div>
+                ),
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Concepts */}
+
+        {concepts.length > 0 && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
+            <h2 className="text-2xl font-black text-amber-400">
+              المفاهيم
+            </h2>
+
+            <div className="mt-4 space-y-3">
+              {concepts.map(
+                (concept, index) => (
+                  <div
+                    key={
+                      concept.id ??
+                      index
+                    }
+                    className="rounded-xl border border-slate-800 bg-slate-950 p-4"
+                  >
+                    {getText(concept) ??
+                      JSON.stringify(
+                        concept,
+                      )}
+                  </div>
+                ),
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Questions */}
+
+        {questions.length > 0 && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
+            <h2 className="text-2xl font-black text-amber-400">
+              تدريبات وأسئلة الدرس
+            </h2>
+
+            <div className="mt-4 space-y-3">
+              {questions.map(
+                (question, index) => (
+                  <div
+                    key={
+                      question.id ??
+                      index
+                    }
+                    className="rounded-xl border border-slate-800 bg-slate-950 p-4"
+                  >
+                    <span className="text-xs font-black text-slate-500">
+                      سؤال {index + 1}
+                    </span>
+
+                    <p className="mt-2 whitespace-pre-wrap leading-7 text-slate-300">
+                      {getText(question) ??
+                        JSON.stringify(
+                          question,
+                        )}
+                    </p>
+                  </div>
+                ),
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Lesson Games
+            IMPORTANT:
+            Games are independent GameDefinitions.
+            They are NOT content blocks.
+        */}
+
+        {hasGames && (
+          <section className="rounded-3xl border border-amber-500/20 bg-slate-900 p-6 shadow-xl">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-xl">
+                🎮
+              </span>
+
+              <div>
+                <h2 className="text-2xl font-black text-amber-400">
+                  ألعاب الدرس
+                </h2>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  ألعاب مرتبطة بهذا الدرس مباشرة.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {games.map((game) => {
+                const launchUrl =
+                  gameLaunchUrl(game);
+
+                const gameType =
+                  game.template?.game_type;
+
+                return (
+                  <article
+                    key={game.id}
+                    className="rounded-2xl border border-slate-800 bg-slate-950 p-5"
+                  >
+                    <div className="flex items-start gap-4">
+                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-2xl">
+                        {gameIcon(
+                          gameType,
+                        )}
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-slate-500">
+                          لعبة تعليمية
+                        </p>
+
+                        <h3 className="mt-1 text-xl font-black text-slate-100">
+                          {game.name ??
+                            "لعبة تعليمية"}
+                        </h3>
+
+                        {gameType && (
+                          <p className="mt-2 text-sm text-slate-500">
+                            النوع: {gameType}
+                          </p>
+                        )}
+
+                        {launchUrl ? (
+                          <a
+                            href={launchUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-4 inline-flex rounded-xl bg-amber-500 px-5 py-3 font-black text-slate-950 transition-colors hover:bg-amber-400"
+                          >
+                            بدء اللعبة 🎮
+                          </a>
+                        ) : (
+                          <p className="mt-4 text-sm font-bold text-slate-500">
+                            اللعبة غير متاحة حاليًا.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Sources */}
+
+        {sources.length > 0 && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
+            <h2 className="text-2xl font-black text-amber-400">
+              مصادر المحتوى
+            </h2>
+
+            <div className="mt-4 space-y-3">
+              {sources.map(
+                (source, index) => (
+                  <div
+                    key={
+                      source.id ??
+                      index
+                    }
+                    className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-sm leading-7 text-slate-400"
+                  >
+                    {getText(source) ??
+                      JSON.stringify(
+                        source,
+                      )}
+                  </div>
+                ),
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Empty state */}
+
+        {!hasContent && (
+          <section className="rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center">
+            <p className="font-bold text-slate-500">
+              لا يوجد محتوى متاح لهذا الدرس حاليًا.
+            </p>
+          </section>
+        )}
+      </div>
+    </main>
+  );
+};
+
+export default LessonPage;
