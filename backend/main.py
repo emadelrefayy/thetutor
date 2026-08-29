@@ -351,23 +351,13 @@ class GameSessionUpdate(BaseModel):
         default_factory=dict
     )
 
-
 class QuestionAttemptCreate(BaseModel):
     session_question_id: str
     answer: Any
-    is_correct: bool
-    points_awarded: int = Field(
-        default=0,
-        ge=0,
-    )
     response_time_ms: int | None = Field(
         default=None,
         ge=0,
     )
-    feedback: dict[str, Any] = Field(
-        default_factory=dict
-    )
-
 
 # =====================================================================
 # Admin content models
