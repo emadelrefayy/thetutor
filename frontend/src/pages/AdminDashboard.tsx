@@ -513,9 +513,17 @@ const AdminDashboard: React.FC = () => {
     ],
   );
 
-  useEffect(() => {
-    void loadGrades();
-  }, [loadGrades]);
+ useEffect(() => {
+  if (activeTab === "overview") {
+    return;
+  }
+
+  if (grades.length > 0) {
+    return;
+  }
+
+  void loadGrades();
+}, [activeTab, grades.length, loadGrades]);
 
   const handleGradeChange = async (
     gradeId: number,
