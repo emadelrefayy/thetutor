@@ -1,48 +1,21 @@
-# The Tutor — Project Architecture
 
-**Status:** ACTIVE  
-**Repository:** `emadelrefayy/thetutor`  
-**Frontend:** React / Vite  
-**Backend:** FastAPI / Python  
-**Cloud Platform:** Supabase  
-**Database:** PostgreSQL
+## ⚙️ متطلبات التشغيل
 
----
+- Node.js (v18+)
+- Python (v3.10+)
+- حساب Supabase (للـ Database, Auth, Storage)
 
-# 1. Architecture Overview
+## 🏃 تشغيل المشروع محلياً
 
-The Tutor uses a three-layer application architecture:
+### 1. إعداد قاعدة البيانات (Supabase)
+- أنشئ مشروعاً جديداً على Supabase.
+- شغّل ملف `schema.sql` (الموجود في جذر المشروع) في SQL Editor.
 
-```text
-┌──────────────────────────────┐
-│          FRONTEND            │
-│        React / Vite          │
-│                              │
-│ UI / UX / Student Experience │
-└──────────────┬───────────────┘
-               │
-               │ HTTPS / REST API
-               ▼
-┌──────────────────────────────┐
-│          BACKEND             │
-│        FastAPI / Python      │
-│                              │
-│ Business Logic               │
-│ Analytics                    │
-│ AI Processing                │
-│ Image Processing             │
-│ Secure Operations            │
-│ Integrations                 │
-└──────────────┬───────────────┘
-               │
-               │ Secure API / DB Access
-               ▼
-┌──────────────────────────────┐
-│           SUPABASE           │
-│                              │
-│ Auth                         │
-│ PostgreSQL                   │
-│ Storage                      │
-│ Row Level Security           │
-│ Database Functions           │
-└──────────────────────────────┘
+### 2. تشغيل Backend (FastAPI)
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # أو `venv\Scripts\activate` في ويندوز
+pip install -r requirements.txt
+# أنشئ ملف .env وضع فيه رابط Supabase ومفاتيح API
+uvicorn main:app --reload --port 8000
