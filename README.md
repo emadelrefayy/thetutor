@@ -1,18 +1,29 @@
-# The Tutor
+# 🎓 TheTutor - منصة تعليمية ذكية
 
-The Tutor is an interactive educational platform for primary-school students.
+منصة تعليمية متكاملة مصممة خصيصاً للطلاب في المدارس المصرية (نظام اللغات والتجريبي)، تجمع بين المنهج الدراسي التفاعلي، الألعاب التعليمية، التحديات، وتحليلات التقدم المدعومة بالذكاء الاصطناعي.
 
-The platform combines curriculum content, interactive lessons, questions, educational games, student progress, learning analytics, gamification, parent features, AI-assisted content generation, and enrichment courses.
+## 🚀 الرؤية
+تحويل رحلة التعلم من مجرد حفظ إلى تجربة تفاعلية ممتعة، حيث يتعلم الطالب، يمارس، يلعب، ويتطور بناءً على إتقانه الحقيقي للمفاهيم الدراسية.
 
----
+## ✨ المميزات الرئيسية
 
-# Architecture
+- **هيكل أكاديمي متكامل**: (صفوف ← مواد ← وحدات ← دروس) مع مفاهيم وأهداف تعلم واضحة.
+- **محتوى غني وتفاعلي**: دروس مدعومة بـ (فيديوهات، إنفوجرافيك، أنشطة، ومفردات لغوية).
+- **بنك أسئلة ذكي**: أسئلة بأنواع متعددة (اختياري، صح/خطأ، سحب، ترتيب) مرتبطة بالدروس والمفاهيم.
+- **نظام ألعاب تعليمي**: قوالب ألعاب قابلة للتكوين (Lesson Games، Challenges) تعتمد على الأسئلة المؤهلة.
+- **تتبع التقدم والتحليلات**: سجل كامل لتقدم الطالب، إتقان المفاهيم، ونقاط الخبرة (XP).
+- **لوحة تحكم ولي الأمر**: متابعة تطور الطالب بأسلوب بسيط وتوجيهي.
+- **لوحة تحكم المشرف**: إدارة كاملة للمناهج، الأسئلة، الألعاب، وصحة المنصة.
+- **توليد محتوى بالذكاء الاصطناعي**: خط أنابيب (Pipeline) لتوليد ومراجعة الدروس والأسئلة.
+- **تواصل اجتماعي**: محادثات مباشرة ومجموعات بين الطلاب.
+- **نظام فوترة واشتراكات**: دعم الباقات والدفع.
 
-The Tutor uses three main application layers:
+## 🛠️ التقنيات المستخدمة
 
-```text
-Frontend
-   ↓
-FastAPI / Python Backend
-   ↓
-Supabase Cloud
+| الطبقة | التقنيات |
+| :--- | :--- |
+| **Frontend** | React, TypeScript, Vite, Tailwind CSS, React Router, Axios, Lucide Icons |
+| **Backend** | Python, FastAPI, Pydantic, HTTPX, python-dotenv |
+| **القاعدة والمنصة** | Supabase (PostgreSQL, Auth, Storage, Realtime, RLS) |
+
+## 📂 هيكل المشروع
