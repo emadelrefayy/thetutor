@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { loadGrades } from '../lib/curriculum';
 import type { Grade } from '../lib/database';
@@ -69,9 +70,9 @@ function GradesPage() {
         <ul>
           {grades.map((grade) => (
             <li key={grade.id}>
-              <button type="button">
+              <Link to={`/grades/${grade.id}/terms`}>
                 {grade.title}
-              </button>
+              </Link>
             </li>
           ))}
         </ul>
