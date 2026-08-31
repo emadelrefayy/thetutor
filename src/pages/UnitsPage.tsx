@@ -1,11 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { loadUnits } from '../lib/curriculum';
-import type { Unit } from '../lib/database';
+import {
+  loadUnits,
+  loadUnitGame,
+} from '../lib/curriculum';
+
+import type {
+  GameDefinition,
+  Unit,
+} from '../lib/database';
 
 function UnitsPage() {
-  const { gradeId, termId, subjectId } = useParams<{
+  const {
+    gradeId,
+    termId,
+    subjectId,
+  } = useParams<{
     gradeId: string;
     termId: string;
     subjectId: string;
@@ -16,6 +27,10 @@ function UnitsPage() {
   const parsedSubjectId = Number(subjectId);
 
   const [units, setUnits] = useState<Unit[]>([]);
+  const [unitGames, setUnitGames] = useState<
+    Record<number, GameDefinition | null>
+  >({});
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,8 +54,28 @@ function UnitsPage() {
 
         const data = await loadUnits(parsedSubjectId);
 
+        if (cancelled) {
+          return;
+        }
+
+        setUnits(data);
+
+        const games = await Promise.all(
+          data.map(async (unit) => ({
+            unitId: unit.id,
+            game: await loadUnitGame(unit.id),
+          })),
+        );
+
         if (!cancelled) {
-          setUnits(data);
+          setUnitGames(
+            Object.fromEntries(
+              games.map(({ unitId, game }) => [
+                unitId,
+                game,
+              ]),
+            ),
+          );
         }
       } catch (err) {
         if (!cancelled) {
@@ -62,22 +97,34 @@ function UnitsPage() {
     return () => {
       cancelled = true;
     };
-  }, [parsedGradeId, parsedTermId, parsedSubjectId]);
+  }, [
+    parsedGradeId,
+    parsedTermId,
+    parsedSubjectId,
+  ]);
 
   const subjectsPath =
     `/grades/${parsedGradeId}/terms/${parsedTermId}/subjects`;
 
   if (loading) {
-    return <main id="units-page">Loading units...</main>;
+    return (
+      <main id="units-page">
+        <h1>Units</h1>
+        <p>Loading units...</p>
+      </main>
+    );
   }
 
   if (error) {
     return (
       <main id="units-page">
         <h1>Units</h1>
+
         <p role="alert">{error}</p>
 
-        <Link to={subjectsPath}>Back to subjects</Link>
+        <Link to={subjectsPath}>
+          Back to subjects
+        </Link>
       </main>
     );
   }
@@ -87,30 +134,56 @@ function UnitsPage() {
       <header>
         <h1>Units</h1>
 
-        <Link to={subjectsPath}>Back to subjects</Link>
+        <Link to={subjectsPath}>
+          Back to subjects
+        </Link>
       </header>
 
       {units.length === 0 ? (
         <p>No units available.</p>
       ) : (
         <ol>
-          {units.map((unit) => (
-            <li key={unit.id}>
-              <Link
-                to={`/grades/${parsedGradeId}/terms/${parsedTermId}/subjects/${parsedSubjectId}/units/${unit.id}/lessons`}
-              >
-                <strong>
-                  Unit {unit.unit_number}
-                </strong>
+          {units.map((unit) => {
+            const game = unitGames[unit.id];
 
-                <span> — {unit.title}</span>
+            const lessonsPath =
+              `/grades/${parsedGradeId}/terms/${parsedTermId}` +
+              `/subjects/${parsedSubjectId}/units/${unit.id}/lessons`;
 
-                {unit.description && (
-                  <p>{unit.description}</p>
-                )}
-              </Link>
-            </li>
-          ))}
+            return (
+              <li key={unit.id}>
+                <article>
+                  <header>
+                    <h2>
+                      Unit {unit.unit_number}
+                    </h2>
+
+                    <h3>{unit.title}</h3>
+
+                    {unit.description && (
+                      <p>{unit.description}</p>
+                    )}
+                  </header>
+
+                  <nav
+                    aria-label={`${unit.title} actions`}
+                  >
+                    <Link to={lessonsPath}>
+                      View lessons
+                    </Link>
+
+                    {game && (
+                      <Link
+                        to={`/games/unit/${game.id}`}
+                      >
+                        Play unit game
+                      </Link>
+                    )}
+                  </nav>
+                </article>
+              </li>
+            );
+          })}
         </ol>
       )}
     </main>
