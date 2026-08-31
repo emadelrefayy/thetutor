@@ -624,4 +624,8 @@ function SubjectsPage() {
           )}
         </section>
       </div>
-   
+    </main>
+  );
+}
+
+export default SubjectsPage;
