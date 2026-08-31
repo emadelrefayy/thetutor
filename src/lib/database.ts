@@ -865,19 +865,31 @@ async function resolveStudentProfile(
   const currentStudents =
     await getCurrentStudentProfiles();
 
-  const profileId =
-    studentProfileId ??
-    currentStudents
-      .filter(
-        (student) =>
-          student.tenant_id === tenantId,
-      )
-      .map((student) => student.profile_id)
-      .at(0);
+  /*
+   * studentProfileId is the tenant-scoped student record ID:
+   *
+   * tenant_student_profiles.id
+   *
+   * It is NOT profiles.id / tenant_student_profiles.profile_id.
+   *
+   * The pages pass the tenant-scoped student record ID, and
+   * lesson_progress.student_profile_id references that same record.
+   */
+  const selectedStudent =
+    studentProfileId
+      ? currentStudents.find(
+          (student) =>
+            student.id === studentProfileId &&
+            student.tenant_id === tenantId,
+        )
+      : currentStudents.find(
+          (student) =>
+            student.tenant_id === tenantId,
+        );
 
-  if (!profileId) {
+  if (!selectedStudent) {
     throw new Error(
-      'No student profile was found in the selected tenant.',
+      'The selected student profile is not available in the selected tenant.',
     );
   }
 
@@ -886,8 +898,8 @@ async function resolveStudentProfile(
     .select(
       'id, tenant_id, profile_id, student_code, display_name, grade_id, date_of_birth, avatar_url, xp, level, is_active, deleted_at, created_at, updated_at',
     )
+    .eq('id', selectedStudent.id)
     .eq('tenant_id', tenantId)
-    .eq('profile_id', profileId)
     .eq('is_active', true)
     .is('deleted_at', null)
     .maybeSingle();
@@ -942,7 +954,7 @@ export async function getLessonProgress(
     )
     .eq(
       'student_profile_id',
-      student.profile_id,
+      student.id,
     )
     .eq('tenant_id', resolvedTenantId)
     .eq('lesson_id', lesson.id)
