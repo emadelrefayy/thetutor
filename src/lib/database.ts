@@ -1,5 +1,26 @@
 import { supabase } from './supabase';
 
+export type UserRole =
+  | 'student'
+  | 'parent'
+  | 'teacher'
+  | 'admin'
+  | 'super_admin';
+
+export type TenantRole =
+  | 'tenant_admin'
+  | 'teacher'
+  | 'student'
+  | 'parent'
+  | 'staff'
+  | 'member';
+
+export type MembershipStatus =
+  | 'invited'
+  | 'active'
+  | 'suspended'
+  | 'revoked';
+
 export type Grade = {
   id: number;
   title: string;
@@ -58,28 +79,51 @@ export type Lesson = {
 };
 
 export type LessonAsset = {
-  id: number;
+  id: string;
   lesson_id: number;
-  asset_type: string;
+  asset_type:
+    | 'image'
+    | 'infographic'
+    | 'video'
+    | 'audio'
+    | 'document'
+    | 'game'
+    | 'external'
+    | string;
   title: string | null;
-  url: string | null;
+  url: string;
   storage_path: string | null;
-  mime_type: string | null;
-  metadata: Record<string, unknown> | null;
+  alt_text: string | null;
+  metadata: Record<string, unknown>;
   sort_order: number;
-  created_at: string | null;
+  is_published: boolean;
+  created_at: string;
 };
 
 export type LessonContentBlock = {
-  id: number;
+  id: string;
   lesson_id: number;
-  block_type: string;
-  title: string | null;
-  content: string | null;
-  media_url: string | null;
-  metadata: Record<string, unknown> | null;
+  block_type:
+    | 'text'
+    | 'heading'
+    | 'image'
+    | 'infographic'
+    | 'video'
+    | 'audio'
+    | 'example'
+    | 'tip'
+    | 'warning'
+    | 'vocabulary'
+    | 'activity'
+    | 'quiz'
+    | 'game'
+    | 'embed'
+    | string;
+  content: Record<string, unknown>;
+  asset_id: string | null;
   sort_order: number;
-  created_at: string | null;
+  is_published: boolean;
+  created_at: string;
 };
 
 export type LessonProgressStatus =
@@ -88,43 +132,257 @@ export type LessonProgressStatus =
   | 'completed';
 
 export type LessonProgress = {
-  id: number;
-  student_profile_id: number;
+  id: string;
+  student_profile_id: string;
   lesson_id: number;
-  tenant_id: string;
+  tenant_id: string | null;
   status: LessonProgressStatus;
   completion_percent: number;
   first_started_at: string | null;
   completed_at: string | null;
   last_accessed_at: string | null;
   time_spent_seconds: number;
-  updated_at: string | null;
+  updated_at: string;
 };
 
+export type GameScopeType =
+  | 'lesson'
+  | 'unit'
+  | 'subject'
+  | 'course'
+  | 'challenge';
+
 export type GameDefinition = {
-  id: number;
-  name: string;
-  scope_type: 'lesson' | 'unit' | 'subject' | 'challenge';
+  id: string;
+  template_id: string;
+  scope_type: GameScopeType;
   lesson_id: number | null;
   unit_id: number | null;
   subject_id: number | null;
-  game_type_id: number | null;
-  template_id: number | null;
-  settings: Record<string, unknown> | null;
+  course_id: string | null;
+  challenge_id: string | null;
+  title: string;
+  settings: Record<string, unknown>;
   is_active: boolean;
   tenant_id: string;
+  created_at: string;
+};
+
+export type Profile = {
+  id: string;
+  name: string;
+  role: UserRole;
+  grade_id: number | null;
   created_at: string | null;
-  updated_at: string | null;
+  invitation_code: string | null;
+  is_code_used: boolean;
+};
+
+export type TenantMembership = {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  role: TenantRole;
+  status: MembershipStatus;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TenantStudentProfile = {
+  id: string;
+  tenant_id: string;
+  profile_id: string;
+  student_code: string;
+  display_name: string | null;
+  grade_id: number | null;
+  date_of_birth: string | null;
+  avatar_url: string | null;
+  xp: number;
+  level: number;
+  is_active: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ParentStudentLink = {
+  tenant_id: string;
+  parent_profile_id: string;
+  student_profile_id: string;
+  relationship: string;
+  is_primary: boolean;
+  created_at: string;
+};
+
+export type ParentStudent = ParentStudentLink & {
+  student: TenantStudentProfile | null;
+};
+
+export type CurrentUserContext = {
+  profile: Profile;
+  memberships: TenantMembership[];
+  studentProfiles: TenantStudentProfile[];
+  parentStudents: ParentStudent[];
 };
 
 async function throwIfError<T>(
-  result: { data: T | null; error: { message: string } | null },
+  result: {
+    data: T | null;
+    error: { message: string } | null;
+  },
 ): Promise<T> {
   if (result.error) {
     throw result.error;
   }
 
   return result.data as T;
+}
+
+async function getCurrentUserId(): Promise<string> {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!user) {
+    throw new Error('Authentication required.');
+  }
+
+  return user.id;
+}
+
+export async function getCurrentProfile(): Promise<Profile> {
+  const userId = await getCurrentUserId();
+
+  const result = await supabase
+    .from('profiles')
+    .select(
+      'id, name, role, grade_id, created_at, invitation_code, is_code_used',
+    )
+    .eq('id', userId)
+    .maybeSingle();
+
+  const profile = await throwIfError(result);
+
+  if (!profile) {
+    throw new Error('Authenticated profile was not found.');
+  }
+
+  return profile;
+}
+
+export async function getCurrentTenantMemberships(): Promise<
+  TenantMembership[]
+> {
+  const userId = await getCurrentUserId();
+
+  const result = await supabase
+    .from('tenant_memberships')
+    .select(
+      'id, tenant_id, user_id, role, status, metadata, created_at, updated_at',
+    )
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .order('created_at');
+
+  return (await throwIfError(result)) ?? [];
+}
+
+export async function getCurrentStudentProfiles(): Promise<
+  TenantStudentProfile[]
+> {
+  const userId = await getCurrentUserId();
+
+  const result = await supabase
+    .from('tenant_student_profiles')
+    .select(
+      'id, tenant_id, profile_id, student_code, display_name, grade_id, date_of_birth, avatar_url, xp, level, is_active, deleted_at, created_at, updated_at',
+    )
+    .eq('profile_id', userId)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .order('created_at');
+
+  return (await throwIfError(result)) ?? [];
+}
+
+export async function getCurrentParentStudents(): Promise<
+  ParentStudent[]
+> {
+  const userId = await getCurrentUserId();
+
+  const linksResult = await supabase
+    .from('tenant_parent_students')
+    .select(
+      'tenant_id, parent_profile_id, student_profile_id, relationship, is_primary, created_at',
+    )
+    .eq('parent_profile_id', userId)
+    .order('created_at');
+
+  const links = (await throwIfError(linksResult)) ?? [];
+
+  if (links.length === 0) {
+    return [];
+  }
+
+  const studentProfileIds = [
+    ...new Set(
+      links.map((link) => link.student_profile_id),
+    ),
+  ];
+
+  const studentsResult = await supabase
+    .from('tenant_student_profiles')
+    .select(
+      'id, tenant_id, profile_id, student_code, display_name, grade_id, date_of_birth, avatar_url, xp, level, is_active, deleted_at, created_at, updated_at',
+    )
+    .in('id', studentProfileIds)
+    .eq('is_active', true)
+    .is('deleted_at', null);
+
+  const students =
+    (await throwIfError(studentsResult)) ?? [];
+
+  const studentsById = new Map(
+    students.map((student) => [
+      student.id,
+      student,
+    ]),
+  );
+
+  return links.map((link) => ({
+    ...link,
+    student:
+      studentsById.get(link.student_profile_id) ?? null,
+  }));
+}
+
+export async function getCurrentUserContext(): Promise<
+  CurrentUserContext
+> {
+  const [
+    profile,
+    memberships,
+    studentProfiles,
+    parentStudents,
+  ] = await Promise.all([
+    getCurrentProfile(),
+    getCurrentTenantMemberships(),
+    getCurrentStudentProfiles(),
+    getCurrentParentStudents(),
+  ]);
+
+  return {
+    profile,
+    memberships,
+    studentProfiles,
+    parentStudents,
+  };
 }
 
 export async function getGrades(): Promise<Grade[]> {
@@ -218,11 +476,12 @@ export async function getLessonAssets(
   const result = await supabase
     .from('lesson_assets')
     .select(
-      'id, lesson_id, asset_type, title, url, storage_path, mime_type, metadata, sort_order, created_at',
+      'id, lesson_id, asset_type, title, url, storage_path, alt_text, metadata, sort_order, is_published, created_at',
     )
     .eq('lesson_id', lessonId)
+    .eq('is_published', true)
     .order('sort_order')
-    .order('id');
+    .order('created_at');
 
   return (await throwIfError(result)) ?? [];
 }
@@ -233,23 +492,48 @@ export async function getLessonContentBlocks(
   const result = await supabase
     .from('lesson_content_blocks')
     .select(
-      'id, lesson_id, block_type, title, content, media_url, metadata, sort_order, created_at',
+      'id, lesson_id, block_type, content, asset_id, sort_order, is_published, created_at',
     )
     .eq('lesson_id', lessonId)
+    .eq('is_published', true)
     .order('sort_order')
-    .order('id');
+    .order('created_at');
 
   return (await throwIfError(result)) ?? [];
 }
 
 export async function getLessonProgress(
   lessonId: number,
+  studentProfileId?: string,
 ): Promise<LessonProgress | null> {
+  const resolvedStudentProfileId =
+    studentProfileId ??
+    (await getCurrentStudentProfiles()).at(0)?.id;
+
+  if (!resolvedStudentProfileId) {
+    return null;
+  }
+
+  const studentProfileResult = await supabase
+    .from('tenant_student_profiles')
+    .select('id, tenant_id')
+    .eq('id', resolvedStudentProfileId)
+    .maybeSingle();
+
+  const studentProfile =
+    await throwIfError(studentProfileResult);
+
+  if (!studentProfile) {
+    return null;
+  }
+
   const result = await supabase
     .from('lesson_progress')
     .select(
       'id, student_profile_id, lesson_id, tenant_id, status, completion_percent, first_started_at, completed_at, last_accessed_at, time_spent_seconds, updated_at',
     )
+    .eq('student_profile_id', resolvedStudentProfileId)
+    .eq('tenant_id', studentProfile.tenant_id)
     .eq('lesson_id', lessonId)
     .maybeSingle();
 
@@ -262,7 +546,7 @@ export async function getLessonGame(
   const result = await supabase
     .from('game_definitions')
     .select(
-      'id, name, scope_type, lesson_id, unit_id, subject_id, game_type_id, template_id, settings, is_active, tenant_id, created_at, updated_at',
+      'id, template_id, scope_type, lesson_id, unit_id, subject_id, course_id, challenge_id, title, settings, is_active, tenant_id, created_at',
     )
     .eq('lesson_id', lessonId)
     .eq('scope_type', 'lesson')
@@ -278,7 +562,7 @@ export async function getUnitGame(
   const result = await supabase
     .from('game_definitions')
     .select(
-      'id, name, scope_type, lesson_id, unit_id, subject_id, game_type_id, template_id, settings, is_active, tenant_id, created_at, updated_at',
+      'id, template_id, scope_type, lesson_id, unit_id, subject_id, course_id, challenge_id, title, settings, is_active, tenant_id, created_at',
     )
     .eq('unit_id', unitId)
     .eq('scope_type', 'unit')
@@ -294,7 +578,7 @@ export async function getSubjectGame(
   const result = await supabase
     .from('game_definitions')
     .select(
-      'id, name, scope_type, lesson_id, unit_id, subject_id, game_type_id, template_id, settings, is_active, tenant_id, created_at, updated_at',
+      'id, template_id, scope_type, lesson_id, unit_id, subject_id, course_id, challenge_id, title, settings, is_active, tenant_id, created_at',
     )
     .eq('subject_id', subjectId)
     .eq('scope_type', 'subject')
