@@ -1,11 +1,15 @@
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+
+import GradesPage from './pages/GradesPage';
 
 function App() {
   return (
     <BrowserRouter>
-      <div id="app">
-        <h1>TheTutor</h1>
-      </div>
+      <Routes>
+        <Route path="/" element={<Navigate to="/grades" replace />} />
+        <Route path="/grades" element={<GradesPage />} />
+        <Route path="*" element={<Navigate to="/grades" replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }
