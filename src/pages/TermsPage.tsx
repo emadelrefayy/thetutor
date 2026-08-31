@@ -80,7 +80,9 @@ function TermsPage() {
         <ul>
           {terms.map((term) => (
             <li key={term.id}>
-              <Link to={`/terms/${term.id}/subjects`}>
+              <Link
+                to={`/grades/${parsedGradeId}/terms/${term.id}/subjects`}
+              >
                 {term.title}
               </Link>
             </li>
