@@ -226,11 +226,13 @@ export type CurrentUserContext = {
   parentStudents: ParentStudent[];
 };
 
+type QueryResult<T> = {
+  data: T | null;
+  error: { message: string } | null;
+};
+
 async function throwIfError<T>(
-  result: {
-    data: T | null;
-    error: { message: string } | null;
-  },
+  result: QueryResult<T>,
 ): Promise<T> {
   if (result.error) {
     throw result.error;
@@ -254,6 +256,61 @@ async function getCurrentUserId(): Promise<string> {
   }
 
   return user.id;
+}
+
+async function getAccessibleTenantIds(): Promise<string[]> {
+  const userId = await getCurrentUserId();
+
+  const [
+    membershipsResult,
+    studentProfilesResult,
+    parentLinksResult,
+  ] = await Promise.all([
+    supabase
+      .from('tenant_memberships')
+      .select('tenant_id')
+      .eq('user_id', userId)
+      .eq('status', 'active'),
+
+    supabase
+      .from('tenant_student_profiles')
+      .select('tenant_id')
+      .eq('profile_id', userId)
+      .eq('is_active', true)
+      .is('deleted_at', null),
+
+    supabase
+      .from('tenant_parent_students')
+      .select('tenant_id')
+      .eq('parent_profile_id', userId),
+  ]);
+
+  const memberships =
+    (await throwIfError(membershipsResult)) ?? [];
+
+  const studentProfiles =
+    (await throwIfError(studentProfilesResult)) ?? [];
+
+  const parentLinks =
+    (await throwIfError(parentLinksResult)) ?? [];
+
+  return [
+    ...new Set([
+      ...memberships.map((row) => row.tenant_id),
+      ...studentProfiles.map((row) => row.tenant_id),
+      ...parentLinks.map((row) => row.tenant_id),
+    ]),
+  ];
+}
+
+async function resolveTenantIds(
+  tenantId?: string,
+): Promise<string[]> {
+  if (tenantId) {
+    return [tenantId];
+  }
+
+  return getAccessibleTenantIds();
 }
 
 export async function getCurrentProfile(): Promise<Profile> {
@@ -330,12 +387,6 @@ export async function getCurrentParentStudents(): Promise<
     return [];
   }
 
-  /*
-   * student_profile_id in tenant_parent_students refers to
-   * profiles.id. The actual tenant-scoped student persona is
-   * identified by tenant_id + profile_id.
-   */
-
   const studentProfileIds = [
     ...new Set(
       links.map((link) => link.student_profile_id),
@@ -361,12 +412,6 @@ export async function getCurrentParentStudents(): Promise<
   const students =
     (await throwIfError(studentsResult)) ?? [];
 
-  /*
-   * IMPORTANT:
-   * profile_id alone is not sufficient because the same global
-   * profile may have a tenant_student_profiles row in multiple
-   * tenants.
-   */
   const studentsByTenantAndProfile = new Map<
     string,
     TenantStudentProfile
@@ -411,12 +456,21 @@ export async function getCurrentUserContext(): Promise<
   };
 }
 
-export async function getGrades(): Promise<Grade[]> {
+export async function getGrades(
+  tenantId?: string,
+): Promise<Grade[]> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
   const result = await supabase
     .from('grades')
     .select(
       'id, title, code, level_code, tenant_id, created_at',
     )
+    .in('tenant_id', tenantIds)
     .order('id');
 
   return (await throwIfError(result)) ?? [];
@@ -424,13 +478,21 @@ export async function getGrades(): Promise<Grade[]> {
 
 export async function getTermsByGrade(
   gradeId: number,
+  tenantId?: string,
 ): Promise<Term[]> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
   const result = await supabase
     .from('terms')
     .select(
       'id, title, code, grade_id, tenant_id, created_at',
     )
     .eq('grade_id', gradeId)
+    .in('tenant_id', tenantIds)
     .order('id');
 
   return (await throwIfError(result)) ?? [];
@@ -438,13 +500,21 @@ export async function getTermsByGrade(
 
 export async function getSubjectsByTerm(
   termId: number,
+  tenantId?: string,
 ): Promise<Subject[]> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
   const result = await supabase
     .from('subjects')
     .select(
       'id, title, code, term_id, tenant_id, icon_name, color_theme, created_at, deleted_at',
     )
     .eq('term_id', termId)
+    .in('tenant_id', tenantIds)
     .is('deleted_at', null)
     .order('id');
 
@@ -453,13 +523,21 @@ export async function getSubjectsByTerm(
 
 export async function getUnitsBySubject(
   subjectId: number,
+  tenantId?: string,
 ): Promise<Unit[]> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
   const result = await supabase
     .from('units')
     .select(
       'id, title, unit_number, subject_id, tenant_id, description, created_at, deleted_at',
     )
     .eq('subject_id', subjectId)
+    .in('tenant_id', tenantIds)
     .is('deleted_at', null)
     .order('unit_number');
 
@@ -468,13 +546,21 @@ export async function getUnitsBySubject(
 
 export async function getLessonsByUnit(
   unitId: number,
+  tenantId?: string,
 ): Promise<Lesson[]> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
   const result = await supabase
     .from('lessons')
     .select(
       'id, title, lesson_number, unit_number, subject_id, unit_id, tenant_id, content_summary, video_url, infographic_url, game_url, created_at, deleted_at',
     )
     .eq('unit_id', unitId)
+    .in('tenant_id', tenantIds)
     .is('deleted_at', null)
     .order('lesson_number');
 
@@ -483,13 +569,21 @@ export async function getLessonsByUnit(
 
 export async function getLessonById(
   lessonId: number,
+  tenantId?: string,
 ): Promise<Lesson | null> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return null;
+  }
+
   const result = await supabase
     .from('lessons')
     .select(
       'id, title, lesson_number, unit_number, subject_id, unit_id, tenant_id, content_summary, video_url, infographic_url, game_url, created_at, deleted_at',
     )
     .eq('id', lessonId)
+    .in('tenant_id', tenantIds)
     .is('deleted_at', null)
     .maybeSingle();
 
@@ -498,13 +592,41 @@ export async function getLessonById(
 
 export async function getLessonAssets(
   lessonId: number,
+  tenantId?: string,
 ): Promise<LessonAsset[]> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
+  /*
+   * Resolve the lesson first.
+   *
+   * This establishes the tenant boundary before querying
+   * lesson_assets and avoids passing a nested query builder
+   * into an .in() filter.
+   */
+  const lessonResult = await supabase
+    .from('lessons')
+    .select('id, tenant_id')
+    .eq('id', lessonId)
+    .in('tenant_id', tenantIds)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  const lesson = await throwIfError(lessonResult);
+
+  if (!lesson) {
+    return [];
+  }
+
   const result = await supabase
     .from('lesson_assets')
     .select(
       'id, lesson_id, asset_type, title, url, storage_path, alt_text, metadata, sort_order, is_published, created_at',
     )
-    .eq('lesson_id', lessonId)
+    .eq('lesson_id', lesson.id)
     .eq('is_published', true)
     .order('sort_order')
     .order('created_at');
@@ -514,13 +636,34 @@ export async function getLessonAssets(
 
 export async function getLessonContentBlocks(
   lessonId: number,
+  tenantId?: string,
 ): Promise<LessonContentBlock[]> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return [];
+  }
+
+  const lessonResult = await supabase
+    .from('lessons')
+    .select('id')
+    .eq('id', lessonId)
+    .in('tenant_id', tenantIds)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  const lesson = await throwIfError(lessonResult);
+
+  if (!lesson) {
+    return [];
+  }
+
   const result = await supabase
     .from('lesson_content_blocks')
     .select(
       'id, lesson_id, block_type, content, asset_id, sort_order, is_published, created_at',
     )
-    .eq('lesson_id', lessonId)
+    .eq('lesson_id', lesson.id)
     .eq('is_published', true)
     .order('sort_order')
     .order('created_at');
@@ -531,16 +674,8 @@ export async function getLessonContentBlocks(
 export async function getLessonProgress(
   lessonId: number,
   studentProfileId?: string,
+  tenantId?: string,
 ): Promise<LessonProgress | null> {
-  /*
-   * lesson_progress.student_profile_id references the global
-   * profile identity (profiles.id).
-   *
-   * The tenant scope must be resolved separately because the
-   * same profile may have a tenant_student_profiles row in
-   * more than one tenant.
-   */
-
   const resolvedStudentProfileId =
     studentProfileId ??
     (await getCurrentStudentProfiles()).at(0)?.profile_id;
@@ -549,45 +684,38 @@ export async function getLessonProgress(
     return null;
   }
 
-  const currentStudentProfiles =
-    await getCurrentStudentProfiles();
+  const tenantIds = await resolveTenantIds(tenantId);
 
-  const matchingProfiles =
-    currentStudentProfiles.filter(
-      (student) =>
-        student.profile_id ===
-        resolvedStudentProfileId,
-    );
-
-  if (matchingProfiles.length === 0) {
+  if (tenantIds.length === 0) {
     return null;
   }
 
-  /*
-   * A lesson belongs to one tenant. Resolve its tenant first,
-   * then find the matching student persona inside that tenant.
-   */
   const lessonResult = await supabase
     .from('lessons')
     .select('id, tenant_id')
     .eq('id', lessonId)
+    .in('tenant_id', tenantIds)
     .is('deleted_at', null)
     .maybeSingle();
 
-  const lesson =
-    await throwIfError(lessonResult);
+  const lesson = await throwIfError(lessonResult);
 
   if (!lesson) {
     return null;
   }
 
-  const matchingStudent =
-    matchingProfiles.find(
-      (student) =>
-        student.tenant_id === lesson.tenant_id,
-    );
+  const studentResult = await supabase
+    .from('tenant_student_profiles')
+    .select('id, tenant_id, profile_id')
+    .eq('profile_id', resolvedStudentProfileId)
+    .eq('tenant_id', lesson.tenant_id)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .maybeSingle();
 
-  if (!matchingStudent) {
+  const student = await throwIfError(studentResult);
+
+  if (!student) {
     return null;
   }
 
@@ -600,24 +728,33 @@ export async function getLessonProgress(
       'student_profile_id',
       resolvedStudentProfileId,
     )
-    .eq('tenant_id', matchingStudent.tenant_id)
+    .eq('tenant_id', student.tenant_id)
     .eq('lesson_id', lessonId)
     .maybeSingle();
 
   return throwIfError(result);
 }
 
+const GAME_DEFINITION_SELECT =
+  'id, template_id, scope_type, lesson_id, unit_id, subject_id, course_id, challenge_id, title, settings, is_active, tenant_id, created_at';
+
 export async function getLessonGame(
   lessonId: number,
+  tenantId?: string,
 ): Promise<GameDefinition | null> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return null;
+  }
+
   const result = await supabase
     .from('game_definitions')
-    .select(
-      'id, template_id, scope_type, lesson_id, unit_id, subject_id, course_id, challenge_id, title, settings, is_active, tenant_id, created_at',
-    )
+    .select(GAME_DEFINITION_SELECT)
     .eq('lesson_id', lessonId)
     .eq('scope_type', 'lesson')
     .eq('is_active', true)
+    .in('tenant_id', tenantIds)
     .maybeSingle();
 
   return throwIfError(result);
@@ -625,15 +762,21 @@ export async function getLessonGame(
 
 export async function getUnitGame(
   unitId: number,
+  tenantId?: string,
 ): Promise<GameDefinition | null> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return null;
+  }
+
   const result = await supabase
     .from('game_definitions')
-    .select(
-      'id, template_id, scope_type, lesson_id, unit_id, subject_id, course_id, challenge_id, title, settings, is_active, tenant_id, created_at',
-    )
+    .select(GAME_DEFINITION_SELECT)
     .eq('unit_id', unitId)
     .eq('scope_type', 'unit')
     .eq('is_active', true)
+    .in('tenant_id', tenantIds)
     .maybeSingle();
 
   return throwIfError(result);
@@ -641,15 +784,21 @@ export async function getUnitGame(
 
 export async function getSubjectGame(
   subjectId: number,
+  tenantId?: string,
 ): Promise<GameDefinition | null> {
+  const tenantIds = await resolveTenantIds(tenantId);
+
+  if (tenantIds.length === 0) {
+    return null;
+  }
+
   const result = await supabase
     .from('game_definitions')
-    .select(
-      'id, template_id, scope_type, lesson_id, unit_id, subject_id, course_id, challenge_id, title, settings, is_active, tenant_id, created_at',
-    )
+    .select(GAME_DEFINITION_SELECT)
     .eq('subject_id', subjectId)
     .eq('scope_type', 'subject')
     .eq('is_active', true)
+    .in('tenant_id', tenantIds)
     .maybeSingle();
 
   return throwIfError(result);
