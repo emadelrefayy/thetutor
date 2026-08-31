@@ -1,4 +1,5 @@
-import { FormEvent, useState } from 'react';
+import { useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
@@ -11,7 +12,9 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
 
     setError('');
@@ -148,7 +151,9 @@ function LoginPage() {
                     type="email"
                     autoComplete="email"
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) =>
+                      setEmail(event.target.value)
+                    }
                     placeholder="name@example.com"
                     required
                     disabled={loading}
@@ -182,7 +187,9 @@ function LoginPage() {
                     <input
                       id="password"
                       name="password"
-                      type={showPassword ? 'text' : 'password'}
+                      type={
+                        showPassword ? 'text' : 'password'
+                      }
                       autoComplete="current-password"
                       value={password}
                       onChange={(event) =>
@@ -197,7 +204,9 @@ function LoginPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        setShowPassword((current) => !current)
+                        setShowPassword(
+                          (current) => !current,
+                        )
                       }
                       disabled={loading}
                       className="absolute left-3 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
@@ -207,7 +216,9 @@ function LoginPage() {
                           : 'إظهار كلمة المرور'
                       }
                     >
-                      {showPassword ? 'إخفاء' : 'إظهار'}
+                      {showPassword
+                        ? 'إخفاء'
+                        : 'إظهار'}
                     </button>
                   </div>
                 </div>
@@ -226,7 +237,9 @@ function LoginPage() {
                   disabled={loading}
                   className="flex w-full items-center justify-center rounded-xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {loading ? 'جارٍ تسجيل الدخول...' : 'تسجيل الدخول'}
+                  {loading
+                    ? 'جارٍ تسجيل الدخول...'
+                    : 'تسجيل الدخول'}
                 </button>
               </form>
 
