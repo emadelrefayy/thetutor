@@ -1,238 +1,171 @@
 TheTutor — Project Architecture
 
-Status: FINAL ARCHITECTURE CONTRACT
-Version: 1.0
+Status: FINAL
+Version: 2.0
 Date: 2026-08-31
-Platform: TheTutor
-Architecture: Multi-Tenant Educational SaaS
-Database: Supabase PostgreSQL
-Primary Backend: Python + FastAPI
-Primary Frontend: React + TypeScript
-Database Contract: "DATABASE_SCHEMA_MASTER_PLAN.md"
+Project: TheTutor
+Architecture Model: React + TypeScript + Supabase
+Frontend Hosting: Vercel
+Backend Platform: Supabase
+Database: PostgreSQL
+Authentication: Supabase Auth
+Authorization: PostgreSQL RLS + Database Authorization Functions
+Realtime: Supabase Realtime
+Storage: Supabase Storage
+Server-side Integrations: Supabase Edge Functions
 
 ---
 
-1. Document Purpose
+1. Purpose
 
-This document is the authoritative system architecture contract for TheTutor.
+This document defines the high-level technical architecture of TheTutor.
 
-It defines how the platform is structured above the database layer.
+It establishes the boundaries between:
 
-The architecture must support:
+- Frontend
+- Supabase backend platform
+- PostgreSQL database
+- Authentication
+- Authorization
+- Database functions
+- Realtime
+- Storage
+- Edge Functions
+- External integrations
 
-- Multi-tenant educational organizations.
-- Egyptian primary education, Grades 1–6.
-- Tenant-specific learning environments.
-- Global user identity with tenant-specific memberships.
-- Students, parents, tenant administrators, and platform administrators.
-- Curriculum management.
-- Lessons and educational content.
-- Videos, infographics, activities, and interactive content.
-- Question banks.
-- Lesson, unit, subject, and challenge games.
-- Difficulty levels.
-- Student progress.
-- Mastery tracking.
-- XP and gamification.
-- Achievements and streaks.
-- Learning analytics.
-- Personalized recommendations.
+This document is the primary system-level architecture contract.
+
+Detailed database rules are defined in:
+
+"DATABASE_SCHEMA_MASTER_PLAN.md"
+
+Detailed frontend rules are defined in:
+
+"FRONTEND_ARCHITECTURE.md"
+
+---
+
+2. Core Architectural Decision
+
+TheTutor does not use a separate Python/FastAPI application backend.
+
+The initial production architecture is:
+
+React + TypeScript
+        │
+        │ HTTPS / WebSocket
+        ▼
+      Supabase
+ ┌───────────────────────────────┐
+ │ Auth                          │
+ │ PostgreSQL                    │
+ │ Row Level Security            │
+ │ Database Functions / RPC      │
+ │ Realtime                      │
+ │ Storage                       │
+ │ Edge Functions                │
+ └───────────────────────────────┘
+        │
+        ▼
+ External Services
+
+The frontend is deployed through Vercel.
+
+Supabase is the managed backend platform.
+
+PostgreSQL is the authoritative application datastore.
+
+---
+
+3. Architectural Goals
+
+The architecture is designed to provide:
+
+1. Strong multi-tenant isolation.
+2. Secure authentication.
+3. Database-enforced authorization.
+4. Server-authoritative learning state.
+5. Server-authoritative game state.
+6. Reliable educational analytics.
+7. Parent/student data separation.
+8. Low operational complexity.
+9. Type-safe frontend/database integration.
+10. Scalable realtime functionality.
+11. Secure external integrations.
+12. Simple deployment through GitHub and Vercel.
+
+The architecture intentionally avoids unnecessary application-server complexity during the initial product stage.
+
+---
+
+4. System Components
+
+The system consists of the following primary components:
+
+GitHub
+   │
+   ▼
+Vercel
+   │
+   ▼
+React + TypeScript Frontend
+   │
+   ├───────────────┐
+   │               │
+   ▼               ▼
+Supabase Auth   Supabase Platform
+                    │
+        ┌───────────┼───────────────┐
+        │           │               │
+        ▼           ▼               ▼
+   PostgreSQL    Realtime        Storage
+        │
+        ├── RLS
+        ├── Functions / RPC
+        ├── Triggers
+        ├── Views
+        └── Analytics
+                    │
+                    ▼
+             Edge Functions
+                    │
+                    ▼
+            External Services
+
+---
+
+5. Frontend
+
+The frontend is a React + TypeScript application.
+
+Primary responsibilities:
+
+- User interface.
+- Navigation.
+- Authentication UI.
+- Session handling.
+- Tenant context.
+- Role-aware UI.
+- Curriculum presentation.
+- Lesson rendering.
+- Game presentation.
 - Parent dashboards.
-- Weekly challenges.
-- Friends and educational social features.
-- Chat and realtime communication.
-- Multiplayer games.
-- Notifications.
-- AI-assisted content generation.
-- SaaS subscriptions and billing.
-- Auditability.
-- Strong tenant isolation.
-- Future extensibility.
+- Student dashboards.
+- Analytics presentation.
+- Forms.
+- Client-side validation.
+- Accessibility.
+- Responsive design.
+- Realtime presentation.
+- Error and loading states.
 
-This document is a technical contract.
-
-Application code must conform to this architecture and to "DATABASE_SCHEMA_MASTER_PLAN.md".
+The frontend is not the authority for security or authoritative business state.
 
 ---
 
-2. Architectural Authority
+6. Frontend Technology
 
-The project has the following authority hierarchy:
-
-DATABASE_SCHEMA_MASTER_PLAN.md
-            │
-            ▼
-PROJECT_ARCHITECTURE.md
-            │
-            ├── BACKEND_ARCHITECTURE.md
-            │
-            ├── FRONTEND_ARCHITECTURE.md
-            │
-            └── API_CONTRACT.md
-
-The database contract has authority over data structures.
-
-This architecture has authority over system boundaries and responsibilities.
-
-Backend architecture defines backend implementation.
-
-Frontend architecture defines frontend implementation.
-
-API Contract defines communication between frontend and backend.
-
-No lower-level document may contradict a higher-level contract.
-
----
-
-3. Core Architectural Principles
-
-3.1 Database Contract First
-
-The database is not an implementation detail.
-
-It is a defined contract.
-
-Application code must use the entities, relationships, constraints, and security model defined in:
-
-DATABASE_SCHEMA_MASTER_PLAN.md
-
-Do not create application-level assumptions that contradict the database model.
-
----
-
-3.2 Multi-Tenancy Is a Security Boundary
-
-TheTutor is a true multi-tenant SaaS platform.
-
-A tenant represents an independent educational environment.
-
-Conceptually:
-
-Platform
-│
-├── Tenant A
-│   ├── Users
-│   ├── Students
-│   ├── Curriculum
-│   ├── Progress
-│   ├── Games
-│   └── Analytics
-│
-├── Tenant B
-│   ├── Users
-│   ├── Students
-│   ├── Curriculum
-│   ├── Progress
-│   ├── Games
-│   └── Analytics
-│
-└── Tenant C
-    ├── Users
-    ├── Students
-    ├── Curriculum
-    ├── Progress
-    ├── Games
-    └── Analytics
-
-Tenant A must never be able to access Tenant B data.
-
-Tenant isolation must be enforced at the database layer through PostgreSQL Row Level Security.
-
-Frontend filtering is not security.
-
-Backend filtering alone is not sufficient security.
-
----
-
-4. Global Identity and Tenant Identity
-
-The system separates:
-
-Global Authentication Identity
-            │
-            ▼
-Tenant Membership
-            │
-            ▼
-Tenant-Specific Profile
-            │
-            ▼
-Learning Context
-
-A single global user may belong to multiple tenants.
-
-Example:
-
-User
-│
-├── Tenant A
-│   └── Student Profile A
-│
-├── Tenant B
-│   └── Student Profile B
-│
-└── Tenant C
-    └── Parent / Staff Membership
-
-The global authentication identity must not be treated as the student's complete educational identity.
-
-Student progress, XP, achievements, games, analytics, and learning context must follow the appropriate tenant-scoped student identity.
-
----
-
-5. High-Level System Architecture
-
-The system is divided into the following logical layers:
-
-┌───────────────────────────────────────────────────────────┐
-│                    PRESENTATION LAYER                     │
-│                                                           │
-│ React + TypeScript                                        │
-│ Student UI | Parent UI | Admin UI | Game UI              │
-└───────────────────────────────┬───────────────────────────┘
-                                │
-                                │ HTTPS / JSON
-                                ▼
-┌───────────────────────────────────────────────────────────┐
-│                     API / APPLICATION                     │
-│                                                           │
-│ FastAPI                                                    │
-│ Authentication | Authorization | Validation                │
-│ REST API | Error Handling | Rate Limiting                 │
-└───────────────────────────────┬───────────────────────────┘
-                                │
-                                ▼
-┌───────────────────────────────────────────────────────────┐
-│                     DOMAIN SERVICES                       │
-│                                                           │
-│ Curriculum | Lessons | Progress | Games                  │
-│ Questions | Analytics | Recommendations                   │
-│ Parent | Social | Challenges | AI | Billing              │
-└───────────────────────────────┬───────────────────────────┘
-                                │
-                                ▼
-┌───────────────────────────────────────────────────────────┐
-│                       DATA ACCESS                          │
-│                                                           │
-│ Supabase Client / PostgreSQL                              │
-│ Transactions | Queries | RPCs                            │
-└───────────────────────────────┬───────────────────────────┘
-                                │
-                                ▼
-┌───────────────────────────────────────────────────────────┐
-│                    SUPABASE PLATFORM                      │
-│                                                           │
-│ PostgreSQL | Auth | Storage | Realtime                    │
-│ RLS | Database Functions                                  │
-└───────────────────────────────────────────────────────────┘
-
----
-
-6. Technology Architecture
-
-6.1 Frontend
-
-Primary stack:
+Initial frontend stack:
 
 React
 TypeScript
@@ -240,1806 +173,1292 @@ Vite
 React Router
 Tailwind CSS
 Supabase JavaScript Client
-Axios or equivalent HTTP client
 
-The frontend is responsible for presentation and user interaction.
+Additional libraries may be added when justified by a concrete product requirement.
 
-It is not the authority for security or business-critical calculations.
-
----
-
-6.2 Backend
-
-Primary stack:
-
-Python 3.11+
-FastAPI
-Pydantic
-Supabase Python Client
-httpx
-pandas
-numpy
-
-The backend is responsible for application business logic.
+Dependencies must not introduce an alternative architectural model.
 
 ---
 
-6.3 Database
+7. Frontend Hosting
 
+Vercel hosts the production frontend.
+
+Deployment flow:
+
+Developer
+   │
+   ▼
+GitHub
+   │
+   ▼
+Vercel
+   │
+   ▼
+Production Frontend
+   │
+   ▼
 Supabase
-    │
-    ├── PostgreSQL
-    ├── Auth
-    ├── Storage
-    ├── Realtime
-    └── RLS
 
-PostgreSQL is the system of record.
+The frontend should be automatically deployable from the main GitHub repository.
 
 ---
 
-7. Backend Responsibility Boundary
+8. Supabase Backend Platform
 
-The backend owns business-critical operations.
+Supabase provides the backend capabilities required by TheTutor.
 
 These include:
 
-- Authorization.
-- Tenant validation.
-- Lesson completion.
-- Question eligibility.
-- Game session creation.
-- Question selection.
-- Answer validation.
-- Score calculation.
-- XP calculation.
-- Achievement evaluation.
-- Streak calculation.
-- Mastery calculations.
-- Analytics aggregation.
-- Recommendation generation.
-- AI content validation.
-- Content publishing.
-- Billing operations.
-- Administrative operations.
-- Audit events.
+Supabase Auth
+PostgreSQL
+RLS
+Database Functions
+RPC
+Triggers
+Views
+Realtime
+Storage
+Edge Functions
 
-The frontend must never be trusted for these operations.
+There is no requirement for a separately deployed Python application server.
 
 ---
 
-8. Frontend Responsibility Boundary
+9. PostgreSQL
 
-The frontend is responsible for:
+PostgreSQL is the source of truth for persistent application state.
 
-- Rendering UI.
-- User interaction.
-- Navigation.
-- Local UI state.
-- Form presentation.
-- Loading states.
-- Error presentation.
-- Accessibility.
-- Responsive behavior.
-- Realtime UI subscriptions where appropriate.
-- Sending authenticated requests to the API.
-- Displaying server-authoritative results.
+It stores and manages:
 
-The frontend must not independently determine:
+- Tenants.
+- Profiles.
+- Memberships.
+- Student identity.
+- Parent/student relationships.
+- Curriculum.
+- Lessons.
+- Content.
+- Questions.
+- Learning progress.
+- Learning events.
+- Game sessions.
+- Question attempts.
+- XP.
+- Achievements.
+- Streaks.
+- Mastery.
+- Analytics data.
+- Recommendations.
+- Challenges.
+- Social data.
+- Notifications.
+- Other application state defined by the database contract.
 
-score
-XP
-eligibility
-mastery
-lesson completion
-authorization
-tenant access
-correct answers
+The authoritative schema is defined by:
+
+"DATABASE_SCHEMA_MASTER_PLAN.md"
 
 ---
 
-9. Authentication Architecture
+10. Database as the Security Boundary
 
-Supabase Auth is the authentication authority.
+The database is responsible for enforcing authorization.
 
-Authentication flow:
+Security must not depend on:
+
+React route guards
+hidden buttons
+client-side filters
+URL parameters
+local state
+
+The database must independently verify whether an authenticated user can access a resource or perform an operation.
+
+---
+
+11. Row Level Security
+
+RLS is mandatory for tenant-sensitive data.
+
+Conceptually:
+
+Authenticated User
+       │
+       ▼
+Supabase Auth
+       │
+       ▼
+Database Session
+       │
+       ▼
+RLS Policies
+       │
+       ├── Tenant Membership
+       ├── Role
+       ├── Ownership
+       └── Relationship
+
+The frontend cannot bypass RLS.
+
+---
+
+12. Multi-Tenancy
+
+TheTutor is a multi-tenant SaaS platform.
+
+Each tenant is logically isolated.
+
+Conceptually:
+
+Platform
+ ├── Tenant A
+ │    ├── Users
+ │    ├── Students
+ │    ├── Curriculum
+ │    └── Learning Data
+ │
+ ├── Tenant B
+ │    ├── Users
+ │    ├── Students
+ │    ├── Curriculum
+ │    └── Learning Data
+ │
+ └── Tenant C
+      ├── Users
+      ├── Students
+      ├── Curriculum
+      └── Learning Data
+
+Tenant isolation must be enforced by database authorization.
+
+---
+
+13. Tenant Context
+
+The frontend maintains the currently selected tenant context.
+
+However:
+
+«A tenant ID supplied by the browser does not grant access to that tenant.»
+
+The database validates the authenticated user's membership and authorization.
+
+---
+
+14. Identity Architecture
+
+The identity model is:
+
+Supabase Auth User
+        │
+        ▼
+Profile
+        │
+        ▼
+Tenant Membership
+        │
+        ▼
+Tenant-scoped Student Identity
+
+Student learning state must use the canonical tenant-scoped student identity defined by the database contract.
+
+---
+
+15. Canonical Student Identity
+
+The canonical learning identity is tenant-aware.
+
+Conceptually:
+
+tenant_id
+    +
+profile_id
+    ↓
+tenant_student_profiles
+
+Learning-state entities must not rely on an ambiguous global student identifier where tenant context is required.
+
+This protects against cross-tenant data association.
+
+---
+
+16. Authorization Model
+
+Authorization is enforced using:
+
+- RLS policies.
+- Database authorization helper functions.
+- Trusted database functions/RPC.
+- Tenant membership.
+- Role checks.
+- Ownership/relationship checks.
+
+The frontend may use authorization state to render appropriate UI.
+
+The database remains authoritative.
+
+---
+
+17. Roles
+
+The system supports role-aware experiences.
+
+The exact role values are defined by the database contract.
+
+Conceptually:
+
+Super Admin
+Tenant Admin
+Teacher
+Parent
+Student
+Staff
+
+Role checks in the frontend improve UX.
+
+Role checks in PostgreSQL enforce security.
+
+---
+
+18. Authentication Flow
+
+Authentication is handled by Supabase Auth.
 
 User
  │
  ▼
+Login / Signup
+ │
+ ▼
 Supabase Auth
  │
  ▼
-JWT
+Authenticated Session
  │
  ▼
-Frontend
- │
- │ Authorization: Bearer <token>
- ▼
-FastAPI
+React Application
  │
  ▼
-JWT Verification
- │
- ▼
-Global User Identity
- │
- ▼
-Tenant Membership
- │
- ▼
-Tenant Context
+Supabase Database
 
-Authentication answers:
-
-«Who is this user?»
-
-Authorization answers:
-
-«What is this user allowed to do here?»
-
-These are separate concerns.
+The browser does not authenticate users through a custom Python API.
 
 ---
 
-10. Tenant Context
+19. Session Flow
 
-Every authenticated request that accesses tenant data must establish a valid tenant context.
+The frontend listens to Supabase Auth state changes.
+
+Session
+  │
+  ├── valid → application
+  │
+  └── expired/signed out
+          ↓
+       auth state
+          ↓
+       protected UI
+
+Supabase controls token/session lifecycle.
+
+---
+
+20. Database Access
+
+The frontend uses the Supabase JavaScript client.
+
+Primary access patterns:
+
+Supabase Auth
+Supabase Queries
+Supabase RPC
+Supabase Realtime
+Supabase Storage
+Supabase Edge Functions
+
+There is no mandatory custom REST API between React and PostgreSQL.
+
+---
+
+21. Direct Database Operations
+
+Direct CRUD is allowed only where:
+
+1. The operation is appropriate for direct client access.
+2. RLS protects the operation.
+3. The operation does not require hidden server-side business logic.
+4. No privileged secret is required.
+
+---
+
+22. Database RPC
+
+Trusted database operations use PostgreSQL functions/RPC.
+
+Examples include:
+
+start_game()
+get_game_question()
+submit_game_answer()
+complete_game()
+
+These operations are server/database authoritative.
+
+The frontend sends input and receives a controlled result.
+
+---
+
+23. Game Architecture
+
+The game engine is database-authoritative.
+
+Student
+   │
+   ▼
+React Game UI
+   │
+   ▼
+start_game()
+   │
+   ▼
+PostgreSQL
+   │
+   ▼
+Game Session
+   │
+   ▼
+get_game_question()
+   │
+   ▼
+Safe Question
+   │
+   ▼
+Student Answer
+   │
+   ▼
+submit_game_answer()
+   │
+   ▼
+Database Evaluation
+   │
+   ▼
+Result
+   │
+   ▼
+complete_game()
+
+The browser must never become the authority for game correctness.
+
+---
+
+24. Game Security
+
+The following must remain protected:
+
+Correct Answer
+Answer Key
+Authoritative Score
+XP Calculation
+Eligibility
+Game Completion
+Other Private Scoring Data
+
+The frontend receives only information required for the current interaction.
+
+---
+
+25. Game Integrity
+
+The database must prevent:
+
+- Unauthorized game-session access.
+- Unauthorized question access.
+- Duplicate answer submission where prohibited.
+- Unauthorized completion.
+- Cross-student session manipulation.
+- Cross-tenant access.
+- Client-side score manipulation.
+
+---
+
+26. Curriculum Architecture
+
+The curriculum hierarchy is:
+
+Curriculum
+    ↓
+Grade
+    ↓
+Term
+    ↓
+Subject
+    ↓
+Unit
+    ↓
+Lesson
+
+The frontend reflects this hierarchy.
+
+PostgreSQL stores the authoritative curriculum structure.
+
+---
+
+27. Lesson Architecture
+
+Lessons consist of structured educational content.
 
 Conceptually:
 
-Request
-  │
-  ├── JWT
-  │
-  ├── User ID
-  │
-  └── Tenant Context
-          │
-          ▼
-   Membership Validation
-          │
-          ▼
-      RLS Boundary
-
-The backend must never blindly trust a tenant ID supplied by the client.
-
-The server must validate that:
-
-authenticated_user
-        ↓
-has membership
-        ↓
-in requested tenant
-        ↓
-with sufficient role/permissions
-
----
-
-11. Authorization Model
-
-Authorization operates at multiple levels.
-
-Level 1 — Authentication
-
-Is the user authenticated?
-
-Level 2 — Tenant Membership
-
-Does the user belong to this tenant?
-
-Level 3 — Role
-
-Does the user have the required role?
-
-Level 4 — Resource Ownership
-
-Can the user access this specific resource?
-
-Level 5 — Business Rule
-
-Is the requested operation valid according to platform rules?
-
-Example:
-
-Student
-  ↓
-Authenticated?
-  ↓
-Member of tenant?
-  ↓
-Owns student profile?
-  ↓
-Has completed lesson?
-  ↓
-Eligible for game?
-  ↓
-Allowed to start session
-
----
-
-12. Core Domain Architecture
-
-The application is divided into bounded domains.
-
-domains/
-│
-├── auth/
-├── tenants/
-├── memberships/
-├── users/
-├── students/
-├── parents/
-├── curriculum/
-├── lessons/
-├── content/
-├── questions/
-├── games/
-├── progress/
-├── mastery/
-├── gamification/
-├── analytics/
-├── recommendations/
-├── challenges/
-├── social/
-├── realtime/
-├── notifications/
-├── ai/
-├── billing/
-└── administration/
-
-Each domain should own its business rules.
-
-Domains must not create circular dependencies unnecessarily.
-
----
-
-13. Curriculum Architecture
-
-The learning hierarchy is conceptually:
-
-Grade
-  │
-  ▼
-Term
-  │
-  ▼
-Subject
-  │
-  ▼
-Unit
-  │
-  ▼
 Lesson
-  │
-  ├── Content Blocks
-  ├── Questions
-  ├── Video
-  ├── Infographic
-  └── Activities
+ ├── Metadata
+ ├── Objectives
+ ├── Content
+ ├── Activities
+ ├── Questions
+ └── Completion
 
-The exact database relationships are defined by:
-
-DATABASE_SCHEMA_MASTER_PLAN.md
-
-Application code must not introduce a parallel curriculum hierarchy.
+The frontend renders the content using reusable content components.
 
 ---
 
-14. Lesson Architecture
+28. Content Architecture
 
-A lesson is a learning unit.
+Content is data-driven.
 
-A lesson may contain:
+The frontend should use a renderer architecture:
 
-Lesson
-│
-├── Introduction
-├── Text
-├── Video
-├── Infographic
-├── Interactive Content
-├── Activity
-├── Questions
-└── Completion Evaluation
+Content Type
+      ↓
+Renderer Registry
+      ↓
+React Component
 
-Lesson content must be represented using the database content model.
+Possible content types include:
 
-The frontend renders content blocks according to their type.
+Text
+Image
+Video
+Infographic
+Activity
+Interactive Content
 
-The backend controls publication and eligibility.
+The database remains the source of content truth.
 
 ---
 
-15. Lesson Completion
+29. Content Publishing
 
-Lesson completion is a server-side decision.
+Content may have draft/review/published states.
 
-The architecture must support:
+Only authorized published content should be exposed to student-facing experiences.
+
+The database controls publication state.
+
+The frontend renders the published representation.
+
+---
+
+30. Learning Progress
+
+Learning progress is authoritative database state.
+
+The frontend displays:
+
+Lesson Progress
+Unit Progress
+Subject Progress
+Curriculum Progress
+
+The browser may calculate visual presentation values but must not replace authoritative progress state.
+
+---
+
+31. Learning Events
+
+Learning events provide the factual basis for analytics.
+
+Examples include:
 
 Lesson Started
-      │
-      ▼
-Content Viewed
-      │
-      ▼
-Required Learning Activity
-      │
-      ▼
-Completion Evaluation
-      │
-      ▼
+Lesson Viewed
 Lesson Completed
+Question Attempted
+Game Started
+Game Completed
+Challenge Participated
 
-Completion must not be determined solely by:
-
-opening a lesson
-
-or:
-
-client-side button click
-
-The completion rules must conform to the database and backend contract.
+The exact event model is defined in the database schema.
 
 ---
 
-16. Question Bank Architecture
+32. Analytics
 
-Questions are reusable learning assets.
+Analytics are derived from authoritative database state and learning events.
 
-A question may be associated with one or more lessons/concepts according to the database model.
+The architecture supports:
 
-Supported question types may include:
+Raw Learning Events
+       ↓
+Database Aggregation
+       ↓
+Analytics Read Models
+       ↓
+Frontend Dashboards
 
-multiple_choice
-true_false
-single_choice
-multiple_select
-matching
-ordering
-short_answer
-
-The architecture must remain extensible.
-
-Question correctness must never be exposed to an untrusted client before an answer is submitted.
+The frontend should not download massive raw datasets merely to calculate dashboards.
 
 ---
 
-17. Non-Negotiable Question Eligibility Rule
+33. Parent Analytics
 
-This is a core platform invariant:
-
-«A student must only be tested on learning material that the student has completed.»
-
-Eligibility is calculated server-side.
+Parents may access authorized children's educational information.
 
 Conceptually:
 
-Student
-   │
-   ▼
-Completed Lessons
-   │
-   ▼
-Eligible Questions
-   │
-   ▼
-Scope Filter
-   │
-   ▼
-Difficulty Filter
-   │
-   ▼
-Game Selection
-
-Possible game scopes:
-
-lesson
-unit
-subject
-challenge
-
-The backend must never select questions outside the student's eligible learning scope.
-
----
-
-18. Game Architecture
-
-The game system consists of:
-
-Game Definition
-      │
-      ▼
-Game Template
-      │
-      ▼
-Game Session
-      │
-      ▼
-Question Selection
-      │
-      ▼
-Attempts
-      │
-      ▼
-Score
-      │
-      ▼
-XP / Rewards
-      │
-      ▼
+Parent
+   ↓
+Authorized Child Relationship
+   ↓
+Child Learning State
+   ↓
 Analytics
 
-Games must be template-driven where possible.
-
-A game template defines behavior and presentation requirements.
-
-A game session represents one student's actual play instance.
+RLS and database relationships enforce access.
 
 ---
 
-19. Game Scopes
+34. Student Analytics
 
-The platform supports:
+Students may see analytics appropriate to their role.
 
-Lesson Game
-    ↓
-Questions from completed lesson material
+Examples:
 
-Unit Game
-    ↓
-Questions from eligible completed lessons in unit
+Progress
+Mastery
+XP
+Achievements
+Streak
+Performance
+Recommendations
 
-Subject Game
-    ↓
-Questions from eligible completed lessons in subject
-
-Challenge Game
-    ↓
-Questions selected according to challenge rules
-
-The same eligibility principle applies to every scope.
+The frontend presents database-derived information.
 
 ---
 
-20. Server-Authoritative Game Engine
+35. Mastery
 
-The backend is authoritative for:
-
-- Session creation.
-- Eligible question selection.
-- Question ordering where required.
-- Correctness validation.
-- Score calculation.
-- XP calculation.
-- Reward calculation.
-- Session completion.
-- Final results.
-
-The client may display game state.
-
-The client must not be trusted to calculate final results.
-
----
-
-21. Answer Submission Flow
-
-Student selects answer
-        │
-        ▼
-Frontend
-        │
-        ▼
-POST answer
-        │
-        ▼
-Backend validates:
-        │
-        ├── authenticated?
-        ├── correct tenant?
-        ├── valid session?
-        ├── valid question?
-        ├── question belongs to session?
-        └── attempt allowed?
-        │
-        ▼
-Evaluate answer
-        │
-        ▼
-Calculate score
-        │
-        ▼
-Calculate XP
-        │
-        ▼
-Record attempt
-        │
-        ▼
-Update analytics
-        │
-        ▼
-Return result
-
----
-
-22. Score and XP Architecture
-
-Scoring is server-authoritative.
-
-XP must be recorded as a transaction rather than treated as an arbitrary frontend counter.
+Mastery is an authoritative derived learning state.
 
 Conceptually:
 
-Game Attempt
-    │
-    ▼
-Score Calculation
-    │
-    ├── Correctness
-    ├── Difficulty
-    ├── Time
-    └── Game Rules
-    │
-    ▼
-XP Calculation
-    │
-    ▼
-XP Transaction
-    │
-    ▼
-Student XP / Level
+Learning Activity
+      ↓
+Database Analytics
+      ↓
+Concept Mastery
+      ↓
+Student / Parent UI
 
-Any formula may evolve without requiring frontend changes.
+The frontend does not independently define mastery.
 
 ---
 
-23. Progress Architecture
+36. Recommendations
 
-Student learning progress exists independently from game scores.
-
-Conceptually:
-
-Student
- │
- ├── Lesson Progress
- │
- ├── Unit Progress
- │
- ├── Subject Progress
- │
- ├── Mastery
- │
- ├── XP
- │
- ├── Achievements
- │
- └── Streaks
-
-Game performance contributes to analytics and mastery but must not automatically be treated as lesson completion unless explicitly defined by the business rules.
-
----
-
-24. Mastery Architecture
-
-Mastery is derived from learning evidence.
-
-Potential evidence includes:
-
-lesson completion
-question attempts
-correct answers
-difficulty
-repeated attempts
-game performance
-time
-historical performance
-
-Mastery calculations belong to the backend/analytics domain.
-
-The frontend only displays the resulting state.
-
----
-
-25. Analytics Architecture
-
-Analytics should be event/data driven.
-
-Important learning events may include:
-
-lesson_started
-content_viewed
-lesson_completed
-question_answered
-game_started
-game_completed
-achievement_earned
-challenge_joined
-challenge_completed
-
-Analytics should support:
-
-- Student performance.
-- Subject performance.
-- Lesson performance.
-- Concept mastery.
-- Weak areas.
-- Strong areas.
-- Progress trends.
-- Engagement.
-- Game performance.
-- Parent insights.
-- Administrative metrics.
-
-Analytics must remain tenant-scoped.
-
----
-
-26. Recommendation Architecture
-
-Recommendations are generated from learning evidence.
+Recommendations may be generated from learning data.
 
 Conceptually:
 
 Learning Data
-      │
-      ▼
-Analytics
-      │
-      ▼
-Weak / Strong Areas
-      │
-      ▼
-Recommendation Engine
-      │
-      ▼
-Personalized Recommendations
-
-Recommendations may include:
-
-Review this lesson
-Practice this concept
-Try an easier game
-Try a harder game
-Complete unfinished content
-Repeat a weak topic
-
-Recommendations must never bypass eligibility rules.
-
----
-
-27. Parent Dashboard Architecture
-
-The parent dashboard is a read-oriented insight layer.
-
-Flow:
-
-Student Activity
-      │
-      ▼
-Analytics
-      │
-      ▼
-Parent Insight Service
-      │
-      ▼
-Parent Dashboard API
-      │
-      ▼
-Parent UI
-
-The parent should see useful summaries such as:
-
-- Lessons completed.
-- Subject progress.
-- Strong areas.
-- Weak areas.
-- Game performance.
-- Recent activity.
-- Learning trends.
-- Recommendations.
-- Achievements.
-
-The parent must only access students to whom the parent has a valid relationship according to the database model.
-
----
-
-28. Social Architecture
-
-Social functionality is tenant-scoped unless explicitly defined as global.
-
-Potential features:
-
-Friends
-Friend Requests
-Conversations
-Messages
-Notifications
-Multiplayer Sessions
-Challenge Participation
-
-Social access must obey:
-
-authentication
       ↓
-tenant membership
+Database / Trusted Logic
       ↓
-social permission
+Recommendation
       ↓
-resource relationship
+Frontend
+
+The frontend displays recommendations but does not treat a client-side recommendation algorithm as authoritative.
 
 ---
 
-29. Realtime Architecture
+37. Gamification
 
-Supabase Realtime is used for live features where appropriate.
+Gamification is database-backed.
 
-Examples:
+Includes:
 
-Chat Messages
-Notifications
-Friendship Updates
-Multiplayer Game State
-Challenge Events
-Live Leaderboards
-
-Realtime is not a replacement for the database.
-
-Persistent state must be stored in PostgreSQL.
-
-Realtime distributes changes/events to connected clients.
-
----
-
-30. Multiplayer Architecture
-
-Multiplayer games require server-authoritative state.
-
-Conceptually:
-
-Player A
-    │
-    ├──────────┐
-    │          │
-    ▼          ▼
-Frontend    Frontend
-    │          │
-    └────┬─────┘
-         ▼
-   Game Session
-         │
-         ▼
-    Server State
-         │
-         ▼
-     PostgreSQL
-         │
-         ▼
-      Realtime
-
-Clients must not be able to independently declare:
-
-winner
-score
 XP
-game result
+Achievements
+Streaks
+Levels
+Rewards
+Challenges
+Leaderboards
+
+Authoritative XP and achievement state is stored/derived by trusted backend/database logic.
 
 ---
 
-31. Weekly Challenge Architecture
+38. Challenges
 
-The platform supports scheduled challenges.
+Challenges are database-backed learning experiences.
 
-Conceptually:
+Eligibility and participation authorization are enforced by the backend platform.
 
-Challenge Definition
-        │
-        ▼
-Scheduled Start
-        │
-        ▼
-Student Eligibility
-        │
-        ▼
-Join Challenge
-        │
-        ▼
-Game Session
-        │
-        ▼
-Attempts
-        │
-        ▼
-Scoring
-        │
-        ▼
-Leaderboard
-        │
-        ▼
+The frontend provides:
+
+Challenge Discovery
+Challenge Details
+Participation
+Progress
 Results
 
-Challenge rules must be server-controlled.
+---
+
+39. Parent/Student Separation
+
+Parent and student experiences are separate UI surfaces.
+
+The database enforces which child data a parent can access.
+
+A parent must not gain access to another student's data merely by changing:
+
+student_id
+tenant_id
+URL
+query parameter
 
 ---
 
-32. AI Content Pipeline
+40. Realtime
 
-AI-generated educational content must never be published directly.
+Supabase Realtime is used where live synchronization provides product value.
 
-Required pipeline:
+Potential use cases:
 
-Source / Curriculum
-        │
-        ▼
-Generation
-        │
-        ▼
-Schema Validation
-        │
-        ▼
-Educational Validation
-        │
-        ▼
-Content Review
-        │
-        ▼
-Draft
-        │
-        ▼
-Approval
-        │
-        ▼
-Publish
+Chat
+Multiplayer Games
+Presence
+Challenge Updates
+Notifications
+Live Activity
 
-AI-generated questions must also pass:
+Realtime is not the source of truth.
 
-schema validation
-+
-content validation
-+
-difficulty validation
-+
-answer validation
-+
-curriculum alignment
-
-AI is an assistant.
-
-It is not the final authority for educational publishing.
+PostgreSQL remains authoritative.
 
 ---
 
-33. Content Injector Architecture
+41. Realtime Architecture
 
-The content injector is a controlled ingestion mechanism.
+PostgreSQL
+    │
+    ▼
+Realtime
+    │
+    ▼
+Connected Clients
 
-Conceptually:
+Clients must handle:
 
-Source Content
-      │
-      ▼
-Content Injector
-      │
-      ▼
-Normalization
-      │
-      ▼
-Validation
-      │
-      ▼
-Database Mapping
-      │
-      ▼
-Draft Content
-      │
-      ▼
-Review
-      │
-      ▼
-Publish
+connect
+subscribe
+event
+reconnect
+unsubscribe
 
-The injector must not bypass:
-
-- Database constraints.
-- Tenant boundaries.
-- Content validation.
-- Publishing workflow.
+Realtime events should be reconciled with authoritative state where required.
 
 ---
 
-34. Storage Architecture
+42. Storage
 
-Supabase Storage is used for managed educational assets.
+Supabase Storage manages educational and user assets.
 
-Potential assets:
+Examples:
 
-Images
+Lesson Images
+Videos
 Infographics
 Avatars
-Documents
-Educational Media
-Generated Assets
+Attachments
 
-Storage paths must be tenant-aware where assets are tenant-owned.
-
-Example:
-
-tenant/{tenant_id}/
-    curriculum/
-    lessons/
-    infographics/
-    avatars/
-
-Public/private access must be determined by asset sensitivity.
+Storage access must be protected using the appropriate Supabase policies.
 
 ---
 
-35. Notification Architecture
+43. Edge Functions
 
-Notifications may originate from:
+Supabase Edge Functions provide server-side execution where direct browser access is inappropriate.
 
-Learning Events
-Game Events
-Achievements
-Challenges
-Friendship Events
-Messages
-Administrative Events
-Billing Events
+Use cases include:
+
+AI Providers
+External APIs
+Payment Providers
+Webhooks
+Secret-bearing Integrations
+Privileged Processing
 
 Flow:
 
-Domain Event
-    │
-    ▼
-Notification Service
-    │
-    ▼
-Notification Record
-    │
-    ├── In-App
-    ├── Realtime
-    └── External Delivery
+Frontend
+   ↓
+Edge Function
+   ↓
+External Service
 
-Notifications must respect tenant and user authorization.
+Secrets remain inside the server-side environment.
 
 ---
 
-36. Billing Architecture
+44. AI Architecture
 
-Billing is a platform-level domain with tenant-specific subscriptions.
+AI is an integration capability, not a separate application backend.
 
-Conceptually:
+Where AI is introduced:
 
-Platform Plans
-      │
-      ▼
-Tenant Subscription
-      │
-      ▼
-Subscription Status
-      │
-      ▼
-Feature Entitlements
+React
+  ↓
+Supabase Edge Function
+  ↓
+AI Provider
+  ↓
+Controlled Result
+  ↓
+React
 
-Billing state must not be determined by frontend state.
+AI provider secrets must never be exposed to the browser.
 
-External payment providers must be isolated behind service interfaces.
-
----
-
-37. Audit Architecture
-
-Security-sensitive and administrative operations should be auditable.
-
-Examples:
-
-tenant_created
-tenant_suspended
-membership_created
-role_changed
-content_published
-content_unpublished
-question_updated
-subscription_changed
-admin_accessed_tenant
-support_action_performed
-
-Audit records must contain sufficient context to determine:
-
-who
-what
-when
-tenant
-resource
-action
+AI-generated educational content should follow the project's content approval workflow before becoming authoritative published content.
 
 ---
 
-38. Error Handling Architecture
+45. External Integrations
 
-The backend must expose consistent API errors.
+External services must not receive secret credentials from the browser.
 
-Conceptually:
-
-{
-  "error": {
-    "code": "LESSON_NOT_FOUND",
-    "message": "Lesson not found",
-    "request_id": "..."
-  }
-}
-
-Errors must not expose:
-
-- Database credentials.
-- Internal secrets.
-- SQL queries.
-- Stack traces.
-- Sensitive user information.
-- Correct answers.
-- Internal infrastructure details.
-
-A request ID should be available for operational debugging.
-
----
-
-39. API Architecture
-
-The API follows resource-oriented REST principles.
-
-Conceptual structure:
-
-/api/v1/
-│
-├── auth/
-├── tenants/
-├── memberships/
-├── students/
-├── parents/
-├── curriculum/
-├── lessons/
-├── progress/
-├── questions/
-├── games/
-├── analytics/
-├── recommendations/
-├── challenges/
-├── social/
-├── notifications/
-├── ai/
-├── billing/
-└── admin/
-
-API details belong in:
-
-API_CONTRACT.md
-
-The API contract must define:
-
-- Endpoint.
-- Method.
-- Authentication.
-- Authorization.
-- Request schema.
-- Response schema.
-- Error schema.
-- Pagination.
-- Filtering.
-- Idempotency where required.
-
----
-
-40. Request Lifecycle
-
-Every protected API request follows this conceptual pipeline:
-
-HTTP Request
-     │
-     ▼
-Request ID
-     │
-     ▼
-Authentication
-     │
-     ▼
-Tenant Context
-     │
-     ▼
-Authorization
-     │
-     ▼
-Pydantic Validation
-     │
-     ▼
-Domain Service
-     │
-     ▼
-Data Access
-     │
-     ▼
-Database / RLS
-     │
-     ▼
-Domain Result
-     │
-     ▼
-Response Schema
-     │
-     ▼
-HTTP Response
-
----
-
-41. Transaction Boundaries
-
-Operations that modify multiple related records must use transactional boundaries.
-
-Examples:
-
-Submit Answer
-    ├── Attempt
-    ├── Score
-    ├── XP Transaction
-    ├── Progress
-    └── Analytics Event
-
-These operations must not leave the database in a partially updated state.
-
-Where appropriate, PostgreSQL transactions/RPCs should be used.
-
----
-
-42. Idempotency
-
-Operations that may be retried must be designed to prevent duplicate effects.
-
-Examples:
-
-XP awarding
-Payment webhook
-Lesson completion
-Achievement awarding
-Challenge submission
-Notification delivery
-
-Retrying the same request must not unintentionally duplicate:
-
-XP
-transactions
-payments
-achievements
-
----
-
-43. Security Architecture
-
-Security must exist at multiple layers.
+Preferred pattern:
 
 Frontend
-   │
-   ▼
-HTTPS
-   │
-   ▼
-Authentication
-   │
-   ▼
-Backend Authorization
-   │
-   ▼
-Tenant Context
-   │
-   ▼
-PostgreSQL RLS
-   │
-   ▼
-Database Constraints
-
-Security principles:
-
-- Least privilege.
-- Defense in depth.
-- Server-authoritative business logic.
-- Database-level tenant isolation.
-- No secret exposure to frontend.
-- No trust in client-calculated scores.
-- No trust in client-supplied tenant ownership.
-- No exposure of correct answers.
-- Strong input validation.
-- Secure logging.
-
----
-
-44. Secrets Management
-
-Secrets must never be committed to Git.
+   ↓
+Supabase Edge Function
+   ↓
+External API
 
 Examples:
 
-Supabase service role key
-Database passwords
-API keys
-Payment provider secrets
-AI provider keys
-JWT secrets
-Webhook secrets
+AI
+Payments
+Email
+Webhooks
+Third-party educational services
 
-Frontend environment variables may contain only values explicitly safe for public exposure.
-
-Privileged Supabase credentials belong exclusively to trusted server-side environments.
+The exact integrations are implementation-dependent.
 
 ---
 
-45. Database Access Rules
+46. Secrets
 
-Application code must not bypass the database security model.
+The browser must never contain:
 
-Do not introduce arbitrary direct database access from the browser for protected business operations.
+Supabase Service Role Key
+Database Password
+AI API Key
+Payment Secret
+Webhook Secret
+Third-party Private Credential
 
-The architecture distinguishes between:
-
-Frontend Supabase Client
-    │
-    ├── Auth
-    └── Approved Realtime operations
-
-Backend Supabase Client
-    │
-    └── Protected application operations
-
-Service-role credentials, when required, must remain server-side.
+Public client configuration may be exposed through Vite environment variables.
 
 ---
 
-46. Caching Architecture
+47. Environment Architecture
 
-Caching may be introduced only where correctness is preserved.
+Frontend public configuration may include:
 
-Safe candidates may include:
+VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
 
-Published curriculum metadata
-Static configuration
-Public content
-Non-sensitive reference data
+Privileged secrets belong in:
 
-Do not cache tenant-sensitive data without tenant-aware cache keys.
+Supabase Edge Function Secrets
 
-Do not cache security decisions indefinitely.
-
-Do not allow cached responses to cross tenant boundaries.
+or another server-side secret store appropriate to the integration.
 
 ---
 
-47. Observability
+48. Type Safety
 
-The system should provide:
-
-Structured Logging
-Metrics
-Error Tracking
-Request IDs
-Health Checks
-Database Monitoring
-Performance Monitoring
-
-Important metrics include:
-
-API latency
-API error rate
-database latency
-game completion rate
-lesson completion rate
-question accuracy
-AI pipeline failures
-Realtime connection health
-
----
-
-48. Health Checks
-
-The backend should expose health information at appropriate endpoints.
+The frontend database contract must be generated from the actual Supabase schema.
 
 Conceptually:
 
-/health
-/health/ready
+PostgreSQL Schema
+       ↓
+Supabase Type Generation
+       ↓
+TypeScript Database Types
+       ↓
+Frontend
 
-Health checks should distinguish between:
-
-process alive
-
-and:
-
-dependencies ready
-
-Sensitive infrastructure details must not be exposed publicly.
+Manual recreation of database entities in TypeScript should be avoided.
 
 ---
 
-49. Deployment Architecture
+49. Data Access Layer
 
-Recommended production topology:
+Frontend features should encapsulate Supabase access.
 
-                    Internet
-                       │
-                       ▼
-                  Vercel / CDN
-                       │
-                       ▼
-                React Frontend
-                       │
-                       │ HTTPS
-                       ▼
-              FastAPI Backend
-                       │
-             ┌─────────┴─────────┐
-             ▼                   ▼
-        Supabase API         External APIs
-             │
-     ┌───────┼────────┐
-     ▼       ▼        ▼
- PostgreSQL Auth   Storage
-     │
-     ▼
-  Realtime
+Conceptually:
 
-The exact hosting provider for the backend may evolve without changing the domain architecture.
+Feature
+ ├── api.ts
+ ├── hooks.ts
+ ├── types.ts
+ ├── components/
+ └── pages/
+
+Components should not contain large, duplicated database queries.
 
 ---
 
-50. Environment Separation
+50. Error Architecture
 
-The project should support distinct environments:
+Errors should be handled at the application boundary.
 
-development
-staging
-production
+Supabase Error
+      ↓
+Error Mapping
+      ↓
+Application Error
+      ↓
+User-facing UI
 
-Each environment should have independently managed configuration and credentials.
+The application should distinguish:
 
-Production data must never be casually used in development.
-
----
-
-51. Testing Architecture
-
-Testing must exist at multiple levels.
-
-Unit Tests
-
-Test:
-
-business rules
-score calculation
-XP calculation
-eligibility
-mastery
-recommendations
-validators
-
-Integration Tests
-
-Test:
-
-API + database
-authentication
-RLS
-tenant isolation
-transactions
-
-End-to-End Tests
-
-Test:
-
-login
-lesson flow
-lesson completion
-game flow
-parent dashboard
-admin workflows
-
-Security Tests
-
-Test:
-
-cross-tenant access
-role escalation
-unauthorized resource access
-correct-answer leakage
-service-role misuse
-
-Tenant isolation tests are mandatory.
+Authentication
+Authorization
+Validation
+Not Found
+Conflict
+Network
+Database
+Unexpected
 
 ---
 
-52. Performance Principles
+51. Caching
+
+Client caching may improve performance.
+
+However cached state must not:
+
+- Bypass RLS.
+- Cross tenant boundaries.
+- Become the authoritative source.
+- Expose stale private information incorrectly.
+
+Tenant-sensitive cache keys must include sufficient identity/context.
+
+---
+
+52. Performance
 
 The system should prioritize:
 
-- Indexed foreign keys.
-- Proper pagination.
-- Efficient question selection.
-- Avoiding N+1 queries.
-- Batch analytics queries.
-- Database-side aggregation where appropriate.
-- Controlled Realtime subscriptions.
-- Lazy loading of heavy frontend assets.
-- CDN delivery for static assets.
+Small initial bundle
+Code splitting
+Lazy loading
+Efficient queries
+Pagination
+Optimized assets
+Selective data fetching
+Efficient realtime subscriptions
 
-Performance optimizations must never weaken authorization.
+Game modules may be lazy loaded.
 
----
-
-53. Extensibility Principles
-
-The architecture must support future additions without redesigning the core.
-
-Examples:
-
-New Game Type
-New Question Type
-New Achievement
-New Recommendation Strategy
-New AI Provider
-New Payment Provider
-New Notification Channel
-New Tenant Feature
-New Analytics Metric
-
-Prefer:
-
-interfaces
-configuration
-templates
-domain services
-database extensibility
-
-over hard-coded conditional logic throughout the application.
+Analytics should use read-optimized data where available.
 
 ---
 
-54. Dependency Direction
+53. Accessibility
 
-Dependencies should flow inward.
+The frontend should follow accessibility best practices.
 
-Preferred:
+Requirements include:
 
-Presentation
-    │
-    ▼
-API
-    │
-    ▼
-Domain Services
-    │
-    ▼
-Data Access
-    │
-    ▼
-Database
-
-Avoid:
-
-Database → Frontend
-Frontend → Database business rules
-Domain → UI
-
-The domain layer must remain independent from presentation concerns.
+- Semantic HTML.
+- Keyboard navigation.
+- Accessible labels.
+- Visible focus.
+- Appropriate contrast.
+- Screen-reader support.
+- Accessible game controls.
+- Reduced-motion considerations.
 
 ---
 
-55. Repository Architecture
+54. Responsive Design
 
-The target repository should evolve toward a structure similar to:
+The frontend supports:
 
-TheTutor/
-│
-├── DATABASE_SCHEMA_MASTER_PLAN.md
-├── PROJECT_ARCHITECTURE.md
-├── FRONTEND_ARCHITECTURE.md
-├── BACKEND_ARCHITECTURE.md
-├── API_CONTRACT.md
-├── README.md
-│
-├── backend/
-│   ├── app/
-│   │   ├── api/
-│   │   ├── core/
-│   │   ├── domains/
-│   │   ├── schemas/
-│   │   ├── services/
-│   │   ├── repositories/
-│   │   └── main.py
-│   │
-│   └── tests/
-│
-├── frontend/
-│   ├── src/
-│   │   ├── app/
-│   │   ├── components/
-│   │   ├── features/
-│   │   ├── pages/
-│   │   ├── hooks/
-│   │   ├── services/
-│   │   ├── lib/
-│   │   └── types/
-│   │
-│   └── tests/
-│
-├── content_injector/
-│   ├── sources/
-│   ├── validators/
-│   ├── transformers/
-│   ├── loaders/
-│   └── tests/
-│
-└── docs/
+Mobile
+Tablet
+Desktop
 
-This is a target architecture.
+Student learning experiences should be mobile-first where practical.
 
-Existing legacy files must not automatically be preserved merely because they exist.
-
-Before deleting or replacing legacy code, perform an implementation audit.
+Administration interfaces may use denser desktop-oriented layouts.
 
 ---
 
-56. Legacy Code Policy
+55. Deployment
 
-The existing repository may contain code that predates this architecture.
+Production deployment is:
 
-Legacy code must be classified as:
+GitHub
+   ↓
+Vercel
+   ↓
+React Application
+   ↓
+Supabase
 
-KEEP
-REFACTOR
-REPLACE
-DELETE
-
-No legacy implementation is authoritative merely because it currently works.
-
-The database contract and architecture documents are authoritative.
-
----
-
-57. Migration Strategy
-
-The project should not attempt to rebuild every feature simultaneously.
-
-Recommended sequence:
-
-1. Database Contract
-        ↓
-2. Project Architecture
-        ↓
-3. Backend Architecture
-        ↓
-4. Frontend Architecture
-        ↓
-5. API Contract
-        ↓
-6. Database Implementation / Verification
-        ↓
-7. Backend Foundation
-        ↓
-8. Frontend Foundation
-        ↓
-9. Curriculum
-        ↓
-10. Lesson Progress
-        ↓
-11. Question Bank
-        ↓
-12. Game Engine
-        ↓
-13. Analytics
-        ↓
-14. Parent Dashboard
-        ↓
-15. Social / Realtime
-        ↓
-16. AI Pipeline
-        ↓
-17. Billing
-        ↓
-18. Production Hardening
+Supabase and Vercel are separate managed services connected through environment configuration and network APIs.
 
 ---
 
-58. Minimum Viable Core
+56. CI/CD
 
-The first production-capable learning loop should be:
+The production pipeline should verify:
+
+Install
+   ↓
+Type Check
+   ↓
+Lint
+   ↓
+Test
+   ↓
+Build
+   ↓
+Deploy
+
+A failed production build must prevent deployment.
+
+---
+
+57. Development Environment
+
+Local development should reproduce the production architecture as closely as practical:
+
+React + TypeScript
+        ↓
+Supabase
+
+No local FastAPI server is required by the architecture.
+
+---
+
+58. Testing Strategy
+
+The system should eventually test:
 
 Authentication
-    ↓
-Tenant Context
-    ↓
-Student
-    ↓
-Curriculum
-    ↓
-Lesson
-    ↓
-Content
-    ↓
-Lesson Progress
-    ↓
-Completion
-    ↓
-Eligible Questions
-    ↓
-Game Session
-    ↓
-Answer
-    ↓
-Score
-    ↓
-XP
-    ↓
-Analytics
 
-This is the platform's core learning loop.
+Login
+Logout
+Session Recovery
+Expired Session
 
-Everything else should build around it.
-
----
-
-59. Critical Invariants
-
-The following rules are mandatory.
-
-Invariant 1 — Tenant Isolation
-
-A user cannot access another tenant's protected data.
-
-Invariant 2 — Server Authority
-
-The client cannot determine authoritative score, XP, mastery, or authorization.
-
-Invariant 3 — Question Eligibility
-
-A student cannot receive questions from lessons the student has not completed.
-
-Invariant 4 — Correct Answer Protection
-
-Correct answers must not be exposed to the client before answer evaluation.
-
-Invariant 5 — Parent Authorization
-
-A parent can access only legitimately linked students.
-
-Invariant 6 — Transactional Rewards
-
-XP/reward operations must be protected against duplicate execution.
-
-Invariant 7 — Database Contract
-
-Application code must conform to the database schema contract.
-
-Invariant 8 — RLS
-
-Tenant isolation must be enforced at PostgreSQL/RLS level.
-
-Invariant 9 — Secrets
-
-Secrets must never be committed to the repository.
-
-Invariant 10 — Auditability
-
-Sensitive administrative operations must be traceable.
-
----
-
-60. Architecture Decision Summary
-
-TheTutor uses:
-
-Multi-Tenant SaaS
-        +
-Global Identity
-        +
-Tenant Membership
-        +
-Tenant-Scoped Learning Profiles
-        +
-React / TypeScript
-        +
-FastAPI / Python
-        +
-Supabase PostgreSQL
-        +
-Supabase Auth
-        +
-Supabase Storage
-        +
-Supabase Realtime
-        +
-PostgreSQL RLS
-        +
-Server-Authoritative Game Engine
-        +
-Event-Based Learning Analytics
-        +
-Controlled AI Content Pipeline
-
-The architecture deliberately separates:
-
-Authentication
 Authorization
-Presentation
-Business Logic
-Data Access
-Persistence
-Realtime
+
+Tenant Isolation
+Role Access
+Parent/Child Access
+Unauthorized Resource Access
+
+Curriculum
+
+Curriculum
+Grade
+Term
+Subject
+Unit
+Lesson
+
+Games
+
+Start
+Question Retrieval
+Answer Submission
+Completion
+Recovery
+
 Analytics
+
+Progress
+Mastery
+Performance
+Parent Visibility
+
+---
+
+59. Security Testing
+
+Security tests must verify that a malicious client cannot:
+
+Access another tenant
+Access another student's records
+Read protected answers
+Modify protected learning state
+Manipulate authoritative XP
+Complete another user's game
+Bypass RLS
+Use an unauthorized RPC
+
+---
+
+60. Architectural Boundaries
+
+Frontend Owns
+
+Presentation
+Interaction
+Navigation
+UI State
+Client Validation
+Accessibility
+Responsive Design
+Realtime Presentation
+
+Supabase Auth Owns
+
+Authentication
+Identity
+Sessions
+Tokens
+
+PostgreSQL Owns
+
+Persistent State
+Relationships
+Transactions
+RLS
+Authoritative Learning State
+Game State
+Analytics Facts
+Derived State
+
+Database Functions Own
+
+Trusted Transactions
+Game Operations
+Complex Database Logic
+Authorization-sensitive Operations
+
+Supabase Realtime Owns
+
+Synchronization
+Live Updates
+Presence
+
+Supabase Storage Owns
+
+Educational Assets
+User Assets
+
+Edge Functions Own
+
+Secrets
+External Integrations
 AI
-Billing
+Webhooks
+Privileged Server-side Processing
 
-This separation is required for maintainability, security, and future scalability.
+Vercel Owns
 
----
-
-61. Definition of Done for Architecture
-
-This architecture is considered implemented only when:
-
-- [ ] Database implementation matches "DATABASE_SCHEMA_MASTER_PLAN.md".
-- [ ] Tenant isolation is enforced through RLS.
-- [ ] Authentication is implemented through Supabase Auth.
-- [ ] Tenant membership is validated server-side.
-- [ ] Backend domain boundaries exist.
-- [ ] Frontend architecture follows its dedicated contract.
-- [ ] API contract exists and matches backend implementation.
-- [ ] Game scoring is server-authoritative.
-- [ ] Question eligibility is server-authoritative.
-- [ ] Correct answers are protected.
-- [ ] XP transactions are idempotent/transaction-safe.
-- [ ] Parent access is relationship-based.
-- [ ] Realtime features are tenant-safe.
-- [ ] AI content passes validation before publication.
-- [ ] Secrets are excluded from Git.
-- [ ] Cross-tenant security tests exist.
-- [ ] Core learning loop passes end-to-end tests.
+Frontend Hosting
+Builds
+Deployments
+Production Web Delivery
 
 ---
 
-62. Mandatory Rule for AI Coding Agents
+61. What Is Explicitly Not Part of the Architecture
 
-Any AI coding agent working on TheTutor MUST:
+The initial architecture does not include:
 
-1. Read "DATABASE_SCHEMA_MASTER_PLAN.md".
-2. Read "PROJECT_ARCHITECTURE.md".
-3. Read the relevant architecture contract before modifying that layer.
-4. Inspect existing implementation before changing it.
-5. Never invent database tables or columns without updating the database contract first.
-6. Never bypass RLS for convenience.
-7. Never move business-critical logic into the frontend.
-8. Never expose correct answers to the client.
-9. Never trust client-calculated scores or XP.
-10. Never introduce cross-tenant data access.
-11. Run relevant tests after modifications.
-12. Report detected architectural contradictions.
-13. Avoid unnecessary rewrites.
-14. Preserve working functionality unless it contradicts the architecture.
-15. Treat security invariants as non-negotiable.
+Python FastAPI backend
+Django backend
+Node.js application backend
+Custom REST API server
+Separate application server
+Separate backend database
+Microservice architecture
+Kubernetes
+
+These are intentionally excluded unless a future architectural decision explicitly introduces them.
 
 ---
 
-63. Next Architecture Documents
+62. Architectural Simplicity Rule
 
-After this document is committed and reviewed, the next documents are:
+The project should not introduce infrastructure merely because it is technically possible.
 
-FRONTEND_ARCHITECTURE.md
-        ↓
-BACKEND_ARCHITECTURE.md
-        ↓
-API_CONTRACT.md
+A new service must have a concrete requirement that cannot be adequately handled by the existing architecture.
 
-The Frontend Architecture must describe the actual React application structure and UI/data-flow boundaries.
+Preferred order:
 
-The Backend Architecture must describe FastAPI modules, domain services, repositories, authentication, authorization, game engine, analytics, AI pipeline, and database access.
+PostgreSQL / RLS
+       ↓
+Database Function / RPC
+       ↓
+Supabase Feature
+       ↓
+Edge Function
+       ↓
+External Service
 
-The API Contract must then formalize the communication between them.
+Only introduce another backend service if the requirement genuinely exceeds the capabilities of the current platform.
 
 ---
 
-END OF PROJECT ARCHITECTURE
+63. Source of Truth Hierarchy
+
+When two layers disagree, authority follows this hierarchy:
+
+PostgreSQL / Supabase
+        ↑
+Database Functions / RPC
+        ↑
+Frontend Data Layer
+        ↑
+React UI State
+
+The lower layer must never override authoritative state from the higher layer.
+
+---
+
+64. Architecture Change Rules
+
+Any change that modifies:
+
+- Authentication architecture.
+- Authorization architecture.
+- Tenant isolation.
+- Database ownership.
+- Game authority.
+- External integration boundaries.
+- Backend platform.
+- Frontend/backend communication.
+
+must first update the appropriate architecture documentation.
+
+Implementation should follow documentation rather than silently changing architectural boundaries.
+
+---
+
+65. Documentation Hierarchy
+
+The project architecture is divided into contracts:
+
+PROJECT_ARCHITECTURE.md
+        │
+        ├── DATABASE_SCHEMA_MASTER_PLAN.md
+        │
+        └── FRONTEND_ARCHITECTURE.md
+
+The database document defines the data/security contract.
+
+The frontend document defines the browser application contract.
+
+This document defines the system-level architecture connecting them.
+
+---
+
+66. Final Runtime Architecture
+
+                         ┌──────────────────┐
+                         │      GitHub      │
+                         │ Source Repository│
+                         └────────┬─────────┘
+                                  │
+                                  ▼
+                         ┌──────────────────┐
+                         │      Vercel      │
+                         │ React + TypeScript│
+                         │       Vite       │
+                         └────────┬─────────┘
+                                  │
+                         HTTPS / WebSocket
+                                  │
+                                  ▼
+       ┌────────────────────────────────────────────────┐
+       │                   SUPABASE                      │
+       │                                                │
+       │  ┌──────────────┐      ┌────────────────────┐  │
+       │  │ Supabase Auth│      │ PostgreSQL         │  │
+       │  │              │      │                    │  │
+       │  │ Identity     │      │ Source of Truth    │  │
+       │  │ Sessions     │      │ RLS                │  │
+       │  └──────────────┘      │ RPC / Functions    │  │
+       │                        │ Triggers            │  │
+       │                        │ Views / Analytics   │  │
+       │                        └─────────┬──────────┘  │
+       │                                  │             │
+       │  ┌──────────────┐      ┌────────▼───────────┐ │
+       │  │  Realtime    │      │      Storage       │ │
+       │  │              │      │                    │ │
+       │  │ Live Updates │      │ Educational Assets │ │
+       │  │ Multiplayer  │      │ User Assets        │ │
+       │  │ Chat         │      └────────────────────┘ │
+       │  └──────────────┘                             │
+       │                                                │
+       │  ┌──────────────────────────────────────────┐  │
+       │  │            Edge Functions                │  │
+       │  │                                          │  │
+       │  │ AI / External APIs / Payments / Webhooks│  │
+       │  └───────────────────────┬──────────────────┘  │
+       └──────────────────────────┼─────────────────────┘
+                                  │
+                                  ▼
+                         External Services
+
+---
+
+67. Final Architectural Statement
+
+TheTutor is a multi-tenant educational SaaS platform built around a deliberately simple managed architecture.
+
+The production system consists of:
+
+React + TypeScript
+        +
+Vercel
+        +
+Supabase
+
+Supabase provides the backend platform.
+
+PostgreSQL is the authoritative source of truth.
+
+Supabase Auth provides identity and sessions.
+
+RLS provides database-enforced authorization and tenant isolation.
+
+Database Functions/RPCs provide trusted transactional operations.
+
+Realtime provides live synchronization.
+
+Storage provides application assets.
+
+Edge Functions provide controlled server-side execution for secrets and external integrations.
+
+The frontend provides the user experience and interaction layer.
+
+There is no separate Python/FastAPI application backend in the initial architecture.
+
+The architecture is intentionally designed to deliver the required educational, gaming, analytics, parent, student, and multi-tenant functionality with minimal infrastructure while preserving clear security and scalability boundaries.
