@@ -126,12 +126,16 @@ function StudentDashboard() {
       : [];
 
   useEffect(() => {
+    const student = selectedStudent;
+
     if (
-      !selectedStudent ||
-      selectedStudent.grade_id === null
+      !student ||
+      student.grade_id === null
     ) {
       return;
     }
+
+    const gradeId = student.grade_id;
 
     let cancelled = false;
 
@@ -140,9 +144,7 @@ function StudentDashboard() {
         setError(null);
 
         const studentTerms =
-          await getTermsByGrade(
-            selectedStudent.grade_id!,
-          );
+          await getTermsByGrade(gradeId);
 
         if (!cancelled) {
           setTerms(studentTerms);
@@ -263,233 +265,138 @@ function StudentDashboard() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-6 py-8">
-        <section>
-          <p className="text-sm font-semibold text-slate-500">
-            مرحبًا
+      <section className="mx-auto max-w-7xl px-6 py-10">
+        <div className="rounded-3xl bg-slate-900 p-8 text-white shadow-sm">
+          <p className="text-sm font-semibold text-slate-300">
+            مرحبًا {profile?.name ?? 'بالطالب'}
           </p>
 
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-            {selectedStudent?.display_name ??
-              profile?.name ??
-              'الطالب'}
+          <h1 className="mt-2 text-3xl font-bold">
+            ابدأ رحلتك التعليمية
           </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-            اختر الفصل الدراسي للانتقال إلى المواد ثم
-            الوحدات والدروس والأنشطة التعليمية.
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+            اختر الفصل الدراسي للوصول إلى المواد والوحدات والدروس
+            الخاصة بالصف المسجل لك.
           </p>
-        </section>
+        </div>
 
         {students.length > 1 && (
-          <section className="mt-8">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <label
-                htmlFor="student-profile"
-                className="block text-sm font-semibold text-slate-700"
-              >
-                الملف الدراسي
-              </label>
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <label
+              htmlFor="student-profile"
+              className="block text-sm font-semibold text-slate-700"
+            >
+              اختر ملف الطالب
+            </label>
 
-              <select
-                id="student-profile"
-                value={
-                  selectedStudentId ?? ''
-                }
-                onChange={(event) =>
-                  setSelectedStudentId(
-                    event.target.value,
-                  )
-                }
-                className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-800 outline-none focus:border-slate-500 sm:max-w-md"
-              >
-                {students.map((student) => (
-                  <option
-                    key={student.id}
-                    value={student.id}
-                  >
-                    {student.display_name ??
-                      student.student_code}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </section>
+            <select
+              id="student-profile"
+              value={selectedStudentId ?? ''}
+              onChange={(event) =>
+                setSelectedStudentId(
+                  event.target.value || null,
+                )
+              }
+              className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+            >
+              {students.map((student) => (
+                <option
+                  key={student.id}
+                  value={student.id}
+                >
+                  {student.display_name ??
+                    student.student_code}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              الصف الدراسي
-            </p>
-
-            <p className="mt-3 text-2xl font-bold text-slate-950">
-              {selectedStudent?.grade_id ??
-                '—'}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-500">
-              الصف المرتبط بملفك الدراسي
-            </p>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              الفصول الدراسية
-            </p>
-
-            <p className="mt-3 text-2xl font-bold text-slate-950">
-              {terms.length}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-500">
-              الفصول المتاحة لهذا الصف
-            </p>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              نقاط XP
-            </p>
-
-            <p className="mt-3 text-2xl font-bold text-slate-950">
-              {selectedStudent?.xp ?? 0}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-500">
-              نقاطك التعليمية الحالية
-            </p>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">
-              المستوى
-            </p>
-
-            <p className="mt-3 text-2xl font-bold text-slate-950">
-              {selectedStudent?.level ?? 1}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-500">
-              مستواك الحالي في المنصة
-            </p>
-          </article>
-        </section>
-
-        <section className="mt-10">
-          <div>
-            <h2 className="text-xl font-bold text-slate-950">
-              اختر الفصل الدراسي
-            </h2>
-
-            <p className="mt-2 text-sm leading-7 text-slate-500">
-              الفصول هنا يتم تحميلها من قاعدة البيانات
-              وفقًا للصف الدراسي المرتبط بحساب الطالب.
-            </p>
-          </div>
-
-          {selectedStudent?.grade_id === null ||
-          !selectedStudent ? (
-            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-6">
-              <h3 className="font-bold text-amber-900">
-                لا يوجد صف دراسي مرتبط
-              </h3>
-
-              <p className="mt-2 text-sm leading-7 text-amber-800">
-                لا يمكن عرض المنهج قبل ربط ملف الطالب
-                بصف دراسي.
+        {selectedStudent && (
+          <div className="mt-8 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold text-slate-500">
+                الطالب
+              </p>
+              <p className="mt-2 font-bold text-slate-900">
+                {selectedStudent.display_name ??
+                  selectedStudent.student_code}
               </p>
             </div>
-          ) : terms.length === 0 ? (
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-              <h3 className="font-bold text-slate-900">
-                لا توجد فصول دراسية متاحة
-              </h3>
 
-              <p className="mt-2 text-sm text-slate-500">
-                لم يتم العثور على فصول مرتبطة بهذا الصف
-                حتى الآن.
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold text-slate-500">
+                المستوى
+              </p>
+              <p className="mt-2 font-bold text-slate-900">
+                Level {selectedStudent.level}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold text-slate-500">
+                XP
+              </p>
+              <p className="mt-2 font-bold text-slate-900">
+                {selectedStudent.xp}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-10">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-500">
+                المنهج الدراسي
+              </p>
+
+              <h2 className="mt-1 text-2xl font-bold text-slate-950">
+                الفصول الدراسية
+              </h2>
+            </div>
+          </div>
+
+          {termCards.length === 0 ? (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+              <p className="text-sm leading-7 text-slate-500">
+                لا توجد فصول دراسية متاحة لهذا الطالب حاليًا.
               </p>
             </div>
           ) : (
-            <div className="mt-5 grid gap-5 md:grid-cols-2">
-              {termCards.map(
-                ({ term, student }) => (
-                  <article
-                    key={term.id}
-                    className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <span className="text-xs font-semibold text-slate-500">
-                          {term.code}
-                        </span>
+            <div className="mt-6 grid gap-5 md:grid-cols-2">
+              {termCards.map(({ term, student }) => (
+                <Link
+                  key={term.id}
+                  to={`/grades/${student.grade_id}/terms/${term.id}`}
+                  className="group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        {term.code}
+                      </p>
 
-                        <h3 className="mt-2 text-2xl font-bold text-slate-950">
-                          {term.title}
-                        </h3>
-                      </div>
-
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-lg font-bold text-white">
-                        {term.id}
-                      </div>
+                      <h3 className="mt-2 text-xl font-bold text-slate-950">
+                        {term.title}
+                      </h3>
                     </div>
 
-                    <p className="mt-4 text-sm leading-7 text-slate-600">
-                      افتح الفصل الدراسي لعرض المواد
-                      والوحدات والدروس المتاحة.
-                    </p>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 transition group-hover:bg-slate-900 group-hover:text-white">
+                      فتح
+                    </span>
+                  </div>
 
-                    <Link
-                      to={`/grades/${student.grade_id}/terms/${term.id}`}
-                      className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-700"
-                    >
-                      دخول الفصل الدراسي
-                    </Link>
-                  </article>
-                ),
-              )}
+                  <p className="mt-5 text-sm leading-7 text-slate-500">
+                    افتح الفصل للوصول إلى المواد والوحدات والدروس.
+                  </p>
+                </Link>
+              ))}
             </div>
           )}
-        </section>
-
-        <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-950">
-            مسار التعلم
-          </h2>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-5">
-            {[
-              'الفصل الدراسي',
-              'المادة',
-              'الوحدة',
-              'الدرس',
-              'اللعبة والتقدم',
-            ].map((step, index) => (
-              <div
-                key={step}
-                className="rounded-xl bg-slate-50 p-4 text-center"
-              >
-                <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-                  {index + 1}
-                </div>
-
-                <p className="mt-3 text-sm font-semibold text-slate-700">
-                  {step}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-6 text-sm leading-7 text-slate-500">
-            يبدأ الطالب من الصف الدراسي، ثم يختار
-            الفصل الدراسي، وبعده المادة والوحدة والدرس.
-            داخل الدرس تظهر عناصر التعلم المرتبطة به،
-            ومنها المحتوى والفيديو والإنفوجراف واللعبة
-            والتقدم.
-          </p>
-        </section>
-      </div>
+        </div>
+      </section>
     </main>
   );
 }
