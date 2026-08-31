@@ -1,179 +1,185 @@
 TheTutor — Frontend Architecture
 
 Status: FINAL FRONTEND ARCHITECTURE CONTRACT
-Version: 1.0
+Version: 2.0
 Date: 2026-08-31
 Platform: TheTutor
+Architecture: Multi-Tenant Educational SaaS
 Frontend: React + TypeScript
 Build Tool: Vite
+Backend Platform: Supabase Managed Backend
 Database Contract: "DATABASE_SCHEMA_MASTER_PLAN.md"
-System Contract: "PROJECT_ARCHITECTURE.md"
+System Architecture: "PROJECT_ARCHITECTURE.md"
 
 ---
 
 1. Document Purpose
 
-This document defines the authoritative architecture for the TheTutor frontend application.
+This document is the authoritative frontend architecture contract for TheTutor.
 
-It specifies:
+It defines how the browser application is structured, how it communicates with Supabase, how authentication and tenant context are handled, how educational experiences are rendered, and how the frontend consumes database-backed functionality.
 
-- Frontend technology stack.
-- Application structure.
-- Routing.
+The frontend must conform to:
+
+1. "DATABASE_SCHEMA_MASTER_PLAN.md"
+2. "PROJECT_ARCHITECTURE.md"
+3. This document
+
+The frontend must not introduce an alternative data model, authorization model, business-logic layer, or backend architecture that conflicts with those documents.
+
+---
+
+2. Architectural Decision
+
+TheTutor does not use a separate FastAPI/Python application backend in the initial architecture.
+
+The application uses:
+
+React + TypeScript
+        │
+        │ HTTPS
+        ▼
+Supabase
+ ├── Auth
+ ├── PostgreSQL
+ ├── RLS
+ ├── Database Functions / RPC
+ ├── Realtime
+ ├── Storage
+ └── Edge Functions
+
+The browser communicates directly with Supabase using the official Supabase JavaScript client.
+
+Where an operation requires server-side secrets, external APIs, AI providers, webhooks, or other privileged processing, the frontend calls an appropriate Supabase Edge Function.
+
+The frontend must never contain:
+
+SUPABASE_SERVICE_ROLE_KEY
+database passwords
+private API keys
+AI provider secrets
+payment provider secrets
+webhook secrets
+
+Only the public Supabase project URL and publishable/anonymous client key appropriate to the project's Supabase configuration may be exposed to the browser.
+
+---
+
+3. Core Frontend Principles
+
+3.1 Supabase Is the Application Backend Platform
+
+There is no application-owned FastAPI server in the initial architecture.
+
+Supabase provides:
+
 - Authentication.
-- Tenant context.
-- Authorization-aware UI.
-- Student experience.
-- Parent experience.
-- Administrative experience.
-- Curriculum navigation.
-- Lesson experience.
-- Progress experience.
-- Game experience.
-- Question rendering.
-- Gamification UI.
-- Analytics visualization.
-- Recommendations.
-- Challenges.
-- Social features.
-- Realtime features.
-- Notifications.
-- API communication.
-- State management.
-- Caching.
-- Error handling.
-- Loading states.
-- Security boundaries.
-- Accessibility.
-- Responsive design.
-- Testing.
-- Performance.
-- Deployment configuration.
+- PostgreSQL.
+- Row Level Security.
+- Database functions.
+- Realtime.
+- Storage.
+- Edge Functions.
+- Scheduled processing through the Supabase platform/database tooling.
 
-This document defines frontend responsibilities.
-
-It does not redefine the database schema.
-
-It does not redefine backend business rules.
-
-It does not replace the API contract.
+The frontend is therefore a Supabase client application.
 
 ---
 
-2. Architectural Authority
+3.2 PostgreSQL Is the Source of Truth
 
-The frontend follows this hierarchy:
+The frontend must not create an independent authoritative copy of:
 
-DATABASE_SCHEMA_MASTER_PLAN.md
-              │
-              ▼
-PROJECT_ARCHITECTURE.md
-              │
-              ▼
-FRONTEND_ARCHITECTURE.md
-              │
-              ▼
-API_CONTRACT.md
+- Student identity.
+- Tenant membership.
+- Curriculum.
+- Lesson completion.
+- Progress.
+- Question eligibility.
+- Game sessions.
+- Question attempts.
+- Scores.
+- XP.
+- Achievements.
+- Streaks.
+- Mastery.
+- Analytics.
+- Parent-child relationships.
 
-The frontend must not contradict any higher-level document.
-
-If a frontend requirement conflicts with the database or backend architecture, the frontend implementation must be changed.
-
----
-
-3. Frontend Core Principles
-
-The frontend follows these principles:
-
-1. Server-authoritative business logic.
-2. Type-safe API communication.
-3. Tenant-aware navigation.
-4. Role-aware UI.
-5. No security decisions based solely on client state.
-6. No client-side calculation of authoritative scores.
-7. No client-side calculation of authoritative XP.
-8. No exposure of correct answers before answer evaluation.
-9. No direct manipulation of protected database state.
-10. Reusable feature modules.
-11. Predictable state management.
-12. Accessible UI.
-13. Responsive design.
-14. Progressive loading.
-15. Clear separation between server state and UI state.
+Local state may temporarily cache or display these values, but PostgreSQL remains authoritative.
 
 ---
 
-4. Frontend Responsibility
+3.3 RLS Is the Security Boundary
 
-The frontend is responsible for:
+The frontend must never treat client-side filtering as security.
 
-Presentation
-Interaction
-Navigation
-Forms
-Local UI state
-Server-state consumption
-Realtime presentation
-Animations
-Accessibility
-Responsive layout
-Error presentation
-Loading states
+For example, this is not sufficient:
 
-The frontend is NOT authoritative for:
+fetch all students
+        ↓
+filter students in React
 
-Authorization
-Tenant isolation
-Question eligibility
-Lesson completion
-Game scoring
-XP calculation
-Mastery calculation
-Achievement validation
-Billing state
-Security rules
+Security must be enforced by Supabase/PostgreSQL RLS.
+
+The frontend should request only the data required for the current user and tenant context.
 
 ---
 
-5. Technology Stack
+3.4 The Frontend Is Not the Authority
 
-Recommended baseline:
+The browser may:
+
+- Display data.
+- Collect input.
+- Start UI flows.
+- Request operations.
+- Maintain temporary UI state.
+- Display server-authoritative results.
+
+The browser must not independently decide:
+
+- Authorization.
+- Tenant access.
+- Question eligibility.
+- Correct answers.
+- Final scores.
+- XP awards.
+- Achievement eligibility.
+- Mastery.
+- Authoritative lesson completion.
+
+---
+
+4. Technology Stack
+
+The initial frontend stack is:
 
 React
 TypeScript
 Vite
 React Router
 Tailwind CSS
-Supabase JS
-TanStack Query
-Zod
-Axios or fetch
+Supabase JavaScript Client
 
-Additional libraries may be introduced when justified.
+Additional libraries may be introduced only when they solve a concrete requirement and do not conflict with this architecture.
 
-Avoid unnecessary dependencies.
-
-Every dependency must have a clear architectural purpose.
+The application should avoid unnecessary dependencies.
 
 ---
 
-6. Target Repository Structure
+5. Frontend Application Structure
 
-The frontend should evolve toward:
+The intended structure is domain-oriented.
 
 frontend/
-│
-├── public/
 │
 ├── src/
 │   │
 │   ├── app/
 │   │   ├── App.tsx
 │   │   ├── router.tsx
-│   │   ├── providers.tsx
-│   │   └── config.ts
-│   │
-│   ├── assets/
+│   │   └── providers/
 │   │
 │   ├── components/
 │   │   ├── ui/
@@ -184,184 +190,194 @@ frontend/
 │   │
 │   ├── features/
 │   │   ├── auth/
-│   │   ├── tenants/
-│   │   ├── students/
-│   │   ├── parents/
+│   │   ├── tenant/
+│   │   ├── student/
+│   │   ├── parent/
 │   │   ├── curriculum/
 │   │   ├── lessons/
-│   │   ├── progress/
+│   │   ├── content/
 │   │   ├── questions/
 │   │   ├── games/
+│   │   ├── progress/
+│   │   ├── mastery/
 │   │   ├── gamification/
 │   │   ├── analytics/
 │   │   ├── recommendations/
 │   │   ├── challenges/
 │   │   ├── social/
+│   │   ├── chat/
 │   │   ├── notifications/
-│   │   ├── realtime/
-│   │   └── admin/
+│   │   └── administration/
+│   │
+│   ├── lib/
+│   │   ├── supabase/
+│   │   ├── auth/
+│   │   ├── errors/
+│   │   └── utils/
 │   │
 │   ├── hooks/
 │   │
-│   ├── lib/
-│   │   ├── api/
-│   │   ├── auth/
-│   │   ├── supabase/
-│   │   ├── query/
-│   │   └── utils/
-│   │
-│   ├── pages/
+│   ├── types/
 │   │
 │   ├── routes/
 │   │
-│   ├── services/
+│   ├── config/
 │   │
-│   ├── types/
+│   ├── styles/
 │   │
-│   └── styles/
+│   └── main.tsx
 │
-├── tests/
+├── public/
 │
+├── .env.example
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
-└── README.md
+└── ...
 
-The exact directory names may evolve, but the separation of concerns must remain.
+This is a target architecture.
 
----
-
-7. Feature-Based Organization
-
-Feature-specific code should be colocated.
-
-Example:
-
-features/lessons/
-│
-├── components/
-├── hooks/
-├── queries/
-├── mutations/
-├── types.ts
-├── validators.ts
-└── index.ts
-
-The same pattern applies to:
-
-games
-progress
-curriculum
-students
-parents
-analytics
-
-Avoid placing all application logic into a single global "components/" directory.
+Folders should be created when their functionality is implemented rather than creating empty speculative subsystems.
 
 ---
 
-8. Application Shell
+6. Supabase Client
 
-The application shell is responsible for:
-
-Authentication bootstrap
-Tenant bootstrap
-Global navigation
-Global notifications
-Global error boundary
-Theme
-Responsive layout
-Route rendering
+The frontend must have a single configured Supabase client.
 
 Conceptually:
 
-App
-│
-├── Providers
-│   ├── Auth Provider
-│   ├── Tenant Provider
-│   ├── Query Provider
-│   └── Realtime Provider
-│
-├── Router
-│
-└── Application Layout
+src/lib/supabase/
+    client.ts
+
+The client uses environment variables:
+
+VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
+
+The exact variable names may be adjusted to the project's Supabase client convention, but secrets must never be exposed.
+
+The service-role key must never be used by browser code.
 
 ---
 
-9. Provider Architecture
+7. Generated Database Types
 
-Global providers should be kept minimal.
+The frontend must use generated TypeScript types derived from the actual Supabase database schema.
 
-Recommended order:
+Conceptually:
 
-App
- │
- ├── ErrorBoundary
- │
- ├── QueryClientProvider
- │
- ├── AuthProvider
- │
- ├── TenantProvider
- │
- └── Router
+src/types/database.ts
 
-Feature-specific providers should be introduced only when necessary.
+The generated types are the database contract.
 
-Avoid deep provider nesting.
+They must not be manually recreated to imitate database tables.
 
----
+When the database contract changes:
 
-10. Authentication Architecture
+Supabase schema
+      ↓
+Generate TypeScript types
+      ↓
+Frontend compilation
+      ↓
+Update affected queries
 
-Supabase Auth provides authentication.
-
-Frontend flow:
-
-Application Start
-      │
-      ▼
-Initialize Supabase
-      │
-      ▼
-Restore Session
-      │
-      ▼
-Get Authenticated User
-      │
-      ▼
-Load Tenant Memberships
-      │
-      ▼
-Resolve Active Tenant
-      │
-      ▼
-Render Authorized Application
-
-The frontend may use the authentication state for UI decisions.
-
-The backend remains authoritative for authorization.
+The frontend must not silently invent fields that do not exist in the database.
 
 ---
 
-11. Authentication States
+8. Authentication Architecture
 
-The frontend must explicitly represent:
+Supabase Auth is the authentication authority.
 
-INITIALIZING
-AUTHENTICATED
-UNAUTHENTICATED
-SESSION_EXPIRED
-AUTH_ERROR
+Flow:
 
-Avoid rendering protected application screens while authentication state is unresolved.
+User
+ │
+ ▼
+Supabase Auth
+ │
+ ▼
+Authenticated Session
+ │
+ ▼
+Supabase Client
+ │
+ ├── PostgreSQL queries
+ ├── RPC calls
+ ├── Realtime
+ └── Storage
+
+The frontend is responsible for:
+
+- Login UI.
+- Signup UI where enabled.
+- Logout.
+- Session state.
+- Auth loading state.
+- Auth error presentation.
+- Redirecting unauthenticated users.
+
+Supabase remains authoritative for authentication.
 
 ---
 
-12. Tenant Context
+9. Session Management
 
-The active tenant is a first-class frontend concept.
+The application must subscribe to Supabase Auth state changes.
+
+The application must correctly handle:
+
+INITIAL_SESSION
+SIGNED_IN
+SIGNED_OUT
+TOKEN_REFRESHED
+USER_UPDATED
+
+The frontend must not manually manufacture authentication state.
+
+If the session expires:
+
+expired session
+      ↓
+Supabase client
+      ↓
+auth state change
+      ↓
+frontend updates
+      ↓
+protected UI responds appropriately
+
+---
+
+10. Authorization Architecture
+
+Authentication and authorization are separate.
+
+Authentication answers:
+
+Who is the user?
+
+Authorization answers:
+
+What can this user access?
+
+The frontend may use role/membership information to determine which UI to display.
+
+However:
+
+«Hiding a button is not authorization.»
+
+Every protected database operation must still be protected by Supabase RLS and/or trusted RPC authorization.
+
+---
+
+11. Tenant Context
+
+A user may belong to multiple tenants.
+
+Therefore the frontend must maintain an explicit current tenant context.
 
 Conceptually:
 
@@ -371,982 +387,815 @@ Authenticated User
 Tenant Memberships
        │
        ▼
-Active Tenant
+Current Tenant
        │
        ▼
-Tenant-Aware Queries
-       │
-       ▼
-Tenant-Aware UI
+Tenant-specific UI
 
-The frontend may store the currently selected tenant ID.
-
-However:
-
-«The backend must validate tenant membership independently.»
-
-The frontend must never assume that possession of a tenant ID grants access.
-
----
-
-13. Tenant Switching
-
-If a user belongs to multiple tenants, the UI may provide a tenant switcher.
-
-Flow:
-
-User
- │
- ▼
-Select Tenant
- │
- ▼
-Update Active Tenant
- │
- ▼
-Invalidate Tenant-Scoped Queries
- │
- ▼
-Reload Tenant Data
-
-Tenant-sensitive cached data must never leak between tenants.
-
----
-
-14. Authorization-Aware UI
-
-The frontend should hide or disable actions the current role cannot use.
+The current tenant may be represented in application state and URL routing.
 
 Example:
 
-Student
-    ├── Lessons
-    ├── Games
-    ├── Progress
-    ├── Achievements
-    └── Social
+/tenant/{tenantId}/...
 
-Parent
-    ├── Children
-    ├── Progress
-    ├── Analytics
-    └── Recommendations
+or an equivalent routing strategy.
 
-Tenant Admin
-    ├── Curriculum
-    ├── Content
-    ├── Students
-    └── Reports
-
-Platform Admin
-    ├── Tenants
-    ├── Subscriptions
-    ├── Platform Analytics
-    └── Support
-
-These are UI capabilities only.
-
-Actual authorization must occur server-side.
+The frontend must never assume that a user belongs to only one tenant.
 
 ---
 
-15. Routing Architecture
+12. Tenant Context Is Not a Security Mechanism
 
-Routes should be organized by application area.
+A client-supplied tenant ID must never be treated as proof of access.
 
-Conceptual routes:
+For example:
+
+/tenant/A
+
+does not grant access to Tenant A.
+
+Supabase RLS must verify:
+
+authenticated user
+        ↓
+tenant membership
+        ↓
+allowed role
+        ↓
+resource access
+
+The frontend only selects the context in which it operates.
+
+The database determines whether the operation is permitted.
+
+---
+
+13. Role-Based UI
+
+Initial roles include:
+
+super_admin
+tenant_admin
+teacher
+parent
+student
+staff
+
+The frontend may provide role-specific interfaces.
+
+Conceptually:
+
+Student
+ └── Student Dashboard
+
+Parent
+ └── Parent Dashboard
+
+Teacher
+ └── Teaching Interface
+
+Tenant Admin
+ └── Tenant Administration
+
+Super Admin
+ └── Platform Administration
+
+A UI route guard is for user experience.
+
+Database RLS remains the security boundary.
+
+---
+
+14. Routing Architecture
+
+React Router is responsible for client-side routing.
+
+Routes should be organized around user-facing capabilities rather than database tables.
+
+Conceptually:
 
 /
 ├── login
-├── register
+├── signup
 │
-├── app/
+├── app
 │   ├── dashboard
 │   ├── curriculum
-│   ├── subjects
-│   ├── units
 │   ├── lessons
-│   ├── progress
 │   ├── games
+│   ├── progress
 │   ├── achievements
-│   ├── challenges
-│   ├── friends
-│   ├── messages
-│   └── notifications
+│   └── challenges
 │
-├── parent/
+├── parent
 │   ├── dashboard
 │   ├── children
 │   ├── progress
-│   ├── analytics
-│   └── recommendations
+│   └── analytics
 │
-├── admin/
+├── admin
 │   ├── dashboard
-│   ├── tenants
-│   ├── students
 │   ├── curriculum
 │   ├── content
-│   ├── questions
-│   ├── games
-│   └── reports
+│   └── users
 │
-└── platform/
-    ├── tenants
-    ├── subscriptions
-    ├── plans
-    └── audit
+└── game
+    └── :sessionId
 
-The exact URL structure may change during implementation.
+The final route tree will be established during implementation.
 
 ---
 
-16. Route Guards
+15. Route Protection
 
-Protected routes must verify frontend authentication state.
+Protected routes require an authenticated Supabase session.
 
 Conceptually:
 
 Route
  │
- ├── Authentication Required?
- │       │
- │       ├── No → Render
- │       │
- │       └── Yes
- │             │
- │             ▼
- │        Authenticated?
- │             │
- │             ├── No → Login
- │             │
- │             └── Yes
- │                   │
- │                   ▼
- │              Render Route
+ ▼
+Auth Check
+ │
+ ├── no session → Login
+ │
+ └── session
+       ↓
+    Application
 
-Role-aware routes may additionally verify available role information.
+Role-specific routes may additionally check membership/role state.
 
-Again, route guards are not security boundaries.
+However, route protection must never replace RLS.
 
 ---
 
-17. API Architecture
+16. Data Access Architecture
 
-All business API communication should pass through a centralized API layer.
-
-Recommended:
-
-lib/api/
-│
-├── client.ts
-├── errors.ts
-├── auth.ts
-├── curriculum.ts
-├── lessons.ts
-├── progress.ts
-├── games.ts
-├── analytics.ts
-├── parents.ts
-├── challenges.ts
-└── admin.ts
-
-Feature code should not repeatedly implement raw HTTP configuration.
-
----
-
-18. API Client
-
-The API client is responsible for:
-
-Base URL
-Authentication headers
-Request IDs
-JSON serialization
-Response parsing
-Error normalization
-Timeouts
-Retry policy where appropriate
-
-Conceptually:
-
-Feature
-  │
-  ▼
-API Service
-  │
-  ▼
-API Client
-  │
-  ▼
-FastAPI
-
----
-
-19. API Types
-
-Frontend request and response types must match the API contract.
-
-Preferred flow:
-
-API Contract
-      │
-      ▼
-Type Definitions
-      │
-      ▼
-API Client
-      │
-      ▼
-Feature
-
-Do not manually duplicate incompatible response shapes throughout components.
-
----
-
-20. Runtime Validation
-
-TypeScript types are compile-time guarantees only.
-
-Important external responses should be runtime validated where appropriate.
-
-Zod or equivalent validation may be used for:
-
-API responses
-URL parameters
-forms
-configuration
-critical external data
-
-Malformed server data should produce controlled errors.
-
----
-
-21. Server State vs UI State
-
-The application must distinguish between:
-
-Server State
-
-lessons
-curriculum
-progress
-games
-analytics
-notifications
-student data
-parent data
-
-UI State
-
-modal open/closed
-selected tab
-animation state
-temporary form state
-sidebar state
-theme
-
-Server state should preferably use TanStack Query or equivalent.
-
-UI state should remain local unless multiple components genuinely need it.
-
----
-
-22. Query Architecture
-
-Queries must be tenant-aware.
-
-Conceptually:
-
-queryKey =
-[
-  tenantId,
-  resource,
-  parameters
-]
+Feature modules should access Supabase through small, explicit data-access functions.
 
 Example:
 
-[
-  "tenant",
-  tenantId,
-  "lessons",
-  subjectId
-]
+features/
+  lessons/
+    api.ts
+    hooks.ts
+    components/
+    pages/
 
-Never use global cache keys for tenant-sensitive resources.
+A feature API should encapsulate:
+
+- Query construction.
+- RPC calls.
+- Type usage.
+- Error normalization.
+- Pagination.
+- Realtime subscriptions where needed.
+
+Components should not contain large raw Supabase queries.
 
 ---
 
-23. Query Invalidation
+17. Query Principles
 
-After a mutation:
+Queries must:
 
-Mutation
-   │
-   ▼
-Server Success
-   │
-   ▼
-Invalidate Affected Queries
-   │
-   ▼
-Refetch / Update Cache
+1. Select only required columns.
+2. Avoid unrestricted table scans.
+3. Respect tenant context.
+4. Respect RLS.
+5. Use database relationships deliberately.
+6. Use pagination for potentially large datasets.
+7. Handle loading and error states.
+8. Use generated TypeScript types.
+
+The frontend must not fetch entire tables simply to filter them locally.
+
+---
+
+18. Mutations
+
+Mutations fall into two categories.
+
+Direct CRUD
+
+Used where direct authenticated database access is explicitly allowed by RLS.
+
+Examples may include:
+
+- Updating an allowed profile field.
+- Updating permitted preferences.
+- Creating user-owned content where allowed.
+
+Trusted RPC
+
+Used for authoritative business operations.
 
 Examples:
 
-Lesson completion
-    ↓
-Invalidate lesson progress
-    ↓
-Invalidate subject progress
-    ↓
-Invalidate dashboard summary
+start_game()
+get_game_question()
+submit_game_answer()
+complete_game()
 
-Avoid broad application-wide cache invalidation when targeted invalidation is possible.
+The frontend must use the trusted RPC rather than attempting to reproduce the business logic locally.
 
 ---
 
-24. Optimistic Updates
+19. Game Architecture
 
-Optimistic updates may be used for low-risk UI interactions.
+The game UI is a frontend experience backed by a server-authoritative database game engine.
 
-Do NOT optimistically finalize authoritative:
+Flow:
+
+Student
+   │
+   ▼
+Game UI
+   │
+   ▼
+start_game()
+   │
+   ▼
+Supabase Database
+   │
+   ▼
+Game Session
+   │
+   ▼
+get_game_question()
+   │
+   ▼
+Safe Question Payload
+   │
+   ▼
+Student Answer
+   │
+   ▼
+submit_game_answer()
+   │
+   ▼
+Database Evaluation
+   │
+   ▼
+Safe Result
+
+The frontend must never receive the authoritative answer key before submission.
+
+---
+
+20. Game UI State
+
+The game interface may maintain temporary local state such as:
+
+currentQuestion
+selectedAnswer
+questionIndex
+timerDisplay
+animationState
+inputState
+
+But authoritative state remains in Supabase.
+
+The frontend must not calculate final:
 
 score
 XP
-lesson completion
-achievement
-payment
-game result
-
-For these operations, display pending state until the server confirms the result.
+correctness
+eligibility
+completion
 
 ---
 
-25. Curriculum UI Architecture
+21. Game Session Recovery
 
-The curriculum navigation follows:
+The game UI should tolerate:
 
-Tenant
- │
- ▼
+- Page refresh.
+- Temporary network failure.
+- Duplicate user interaction.
+- Realtime reconnection where applicable.
+- Session completion already recorded.
+
+The database remains authoritative.
+
+The frontend must reconcile its local UI state with the current database/session state.
+
+---
+
+22. Question Security
+
+Student-facing queries must not expose:
+
+correct_answer
+is_correct
+answer key
+private scoring configuration
+
+unless explicitly required after the answer has been evaluated and returned through a trusted operation.
+
+The frontend question component should therefore consume a safe question DTO/type.
+
+Conceptually:
+
+SafeQuestion
+ ├── id
+ ├── question
+ ├── type
+ ├── options
+ ├── media
+ └── presentation metadata
+
+The authoritative answer remains database-side.
+
+---
+
+23. Question Eligibility
+
+The frontend must not determine whether a student is eligible for a question.
+
+The flow is:
+
+Student
+   ↓
+Completed / eligible learning material
+   ↓
+Database eligibility logic
+   ↓
+Game question selection
+   ↓
+Safe question
+
+If a student manually changes a question ID in the browser request, the database must reject an unauthorized/ineligible operation.
+
+---
+
+24. Curriculum Architecture
+
+The frontend reflects the authoritative curriculum hierarchy:
+
 Curriculum
- │
- ▼
+   ↓
 Grade
- │
- ▼
+   ↓
 Term
- │
- ▼
+   ↓
 Subject
- │
- ▼
+   ↓
 Unit
- │
- ▼
+   ↓
 Lesson
 
-The UI must preserve this context during navigation.
+The frontend must not introduce a competing hierarchy.
 
----
-
-26. Curriculum Navigation
+Curriculum screens should progressively narrow the learning context.
 
 Example:
 
-Grade 1
-  └── Term 1
-      └── English
-          └── Unit 1
-              └── Lesson 1
-
-Breadcrumbs should expose the hierarchy.
-
-The frontend should not construct curriculum relationships independently.
-
-The API response is authoritative.
+Grade
+  ↓
+Term
+  ↓
+Subject
+  ↓
+Unit
+  ↓
+Lesson
 
 ---
 
-27. Lesson Page Architecture
+25. Lesson Architecture
 
-A lesson page may contain:
-
-Lesson Header
-    │
-    ├── Title
-    ├── Progress
-    └── Status
-    │
-    ▼
-Content Renderer
-    │
-    ├── Text
-    ├── Video
-    ├── Image
-    ├── Infographic
-    ├── Interactive Activity
-    └── Other Blocks
-    │
-    ▼
-Completion Area
-    │
-    ▼
-Related Game
-
-Content must be rendered according to server-provided content types.
-
----
-
-28. Content Renderer
-
-Use a type-driven renderer.
+A lesson page is a content renderer.
 
 Conceptually:
 
-ContentBlock
-      │
-      ├── text
-      ├── image
-      ├── video
-      ├── infographic
-      ├── audio
-      ├── interactive
-      └── activity
+Lesson
+ │
+ ├── Header
+ ├── Objectives
+ ├── Content Blocks
+ │     ├── Text
+ │     ├── Video
+ │     ├── Infographic
+ │     ├── Activity
+ │     └── Interactive Content
+ │
+ ├── Questions / Activities
+ │
+ └── Completion Action
 
-Each type has a dedicated renderer.
-
-Unknown content types must fail gracefully rather than crash the entire lesson.
+The renderer must be driven by the database content model rather than hard-coded lesson-specific layouts.
 
 ---
 
-29. Lesson Completion UI
+26. Content Blocks
+
+Content rendering should use a component registry.
+
+Conceptually:
+
+content block type
+       ↓
+renderer registry
+       ↓
+React component
+
+Example:
+
+text        → TextBlock
+video       → VideoBlock
+image       → ImageBlock
+infographic → InfographicBlock
+activity    → ActivityBlock
+
+Unknown content types must fail gracefully rather than breaking the entire lesson page.
+
+---
+
+27. Content Versioning
+
+The frontend must display the currently published content version.
+
+The frontend must not independently select unpublished drafts.
+
+Conceptually:
+
+Lesson
+  ↓
+Published Content Version
+  ↓
+Content Blocks
+  ↓
+Renderer
+
+Draft/review/publishing workflows belong to authorized database/admin operations.
+
+---
+
+28. Student Progress
+
+The frontend displays progress returned from Supabase.
+
+Examples:
+
+Lesson Progress
+Unit Progress
+Subject Progress
+Curriculum Progress
+
+The frontend may calculate purely presentational values such as:
+
+percentage width
+progress bar rendering
+visual status
+
+It must not invent authoritative completion state.
+
+---
+
+29. Lesson Completion
+
+The frontend may request lesson completion through the approved database operation.
+
+The UI should represent:
+
+not_started
+in_progress
+completed
+
+The browser must not directly mutate authoritative completion state through an arbitrary client-side flag.
+
+---
+
+30. Parent Dashboard
+
+Parents must only see explicitly authorized children.
+
+Conceptually:
+
+Parent
+  ↓
+Authorized Child Relationships
+  ↓
+Child Selector
+  ↓
+Child Analytics
+  ↓
+Learning Progress
+
+The frontend must never fetch all students and filter them to identify a parent's children.
+
+RLS/database relationships enforce the boundary.
+
+---
+
+31. Parent Analytics
+
+The parent dashboard may display:
+
+- Lesson progress.
+- Subject performance.
+- Mastery.
+- Game performance.
+- XP.
+- Achievements.
+- Streaks.
+- Learning activity.
+- Recommendations where available.
+
+The frontend consumes database-backed read models/analytics.
+
+It does not independently calculate authoritative educational analytics.
+
+---
+
+32. Student Dashboard
+
+The student dashboard should provide a concise learning overview.
+
+Potential sections:
+
+Continue Learning
+Recent Lessons
+Progress
+Games
+XP
+Achievements
+Streak
+Challenges
+Recommendations
+
+The final dashboard layout is a product/UI decision and may evolve without changing the database architecture.
+
+---
+
+33. Analytics Presentation
+
+Analytics should be displayed using read-optimized database data.
+
+The frontend should prefer:
+
+analytics views
+materialized/read models
+aggregated tables
+RPC results
+
+where these are defined by the database contract.
+
+It should not download large raw event datasets merely to calculate dashboards in the browser.
+
+---
+
+34. Mastery
+
+Mastery is database/analytics-derived state.
+
+The frontend displays mastery.
+
+Examples:
+
+Mastery score
+Mastery level
+Concept strengths
+Concept weaknesses
+
+The frontend must not overwrite authoritative mastery values.
+
+---
+
+35. Recommendations
+
+Recommendations are server/database-derived.
 
 The frontend may display:
 
-Not Started
-In Progress
-Completed
+Recommended Lesson
+Recommended Practice
+Recommended Game
+Recommended Concept Review
 
-Completion must be confirmed by the backend.
-
-Flow:
-
-Student Learning
-      │
-      ▼
-Frontend submits completion event
-      │
-      ▼
-Backend evaluates rules
-      │
-      ▼
-Server confirms completion
-      │
-      ▼
-Frontend updates UI
+The frontend must not pretend that a locally calculated recommendation is authoritative.
 
 ---
 
-30. Progress UI
+36. Gamification
 
-Progress can be represented through:
-
-Progress bars
-Completion percentages
-Lesson states
-Unit completion
-Subject completion
-Learning streaks
-Mastery indicators
-
-Do not calculate authoritative progress using incomplete client-side data.
-
----
-
-31. Game UI Architecture
-
-The game experience should be isolated from normal application navigation.
-
-Conceptually:
-
-Game Lobby
-    │
-    ▼
-Game Preparation
-    │
-    ▼
-Game Session
-    │
-    ├── Question
-    ├── Timer
-    ├── Progress
-    └── Feedback
-    │
-    ▼
-Game Completion
-    │
-    ▼
-Results
-    │
-    ▼
-Rewards / Analytics
-
----
-
-32. Game Session Lifecycle
-
-The frontend does not create an authoritative game session locally.
-
-Flow:
-
-Start Game
-   │
-   ▼
-POST /game-session
-   │
-   ▼
-Server creates session
-   │
-   ▼
-Server returns session state
-   │
-   ▼
-Render Game
-
----
-
-33. Question Presentation
-
-The frontend receives only information required to present the question.
-
-Conceptually:
-
-Question
-├── id
-├── type
-├── prompt
-├── options
-├── media
-└── metadata required for UI
-
-The frontend must not receive:
-
-correct_answer
-answer_key
-server scoring formula
-hidden validation state
-
----
-
-34. Answer Submission UI
-
-Flow:
-
-Student Answer
-      │
-      ▼
-Disable duplicate submission
-      │
-      ▼
-Submit to API
-      │
-      ▼
-Show pending state
-      │
-      ▼
-Receive server result
-      │
-      ▼
-Display feedback
-      │
-      ▼
-Continue
-
-Duplicate submissions must be prevented at the UI level where possible.
-
-The backend remains the final protection.
-
----
-
-35. Game Results
-
-Results should display server-provided values.
-
-Possible information:
-
-Score
-Correct Answers
-Accuracy
-XP Earned
-Achievements
-Performance Summary
-Recommended Next Step
-
-Do not reconstruct final score from client-side answers.
-
----
-
-36. Difficulty UI
-
-Games may expose:
-
-Easy
-Medium
-Hard
-
-However:
-
-«Difficulty eligibility is a server decision.»
-
-The frontend only requests or displays available difficulty options.
-
----
-
-37. Gamification UI
-
-Gamification may include:
+The frontend renders:
 
 XP
 Level
 Achievements
-Badges
 Streaks
-Progress
+Rewards
 Leaderboards
 
-The frontend displays server-authoritative values.
+XP history is authoritative in the database.
 
-Animations are presentation only.
+The UI must not increment XP locally as a final operation.
 
----
-
-38. Achievement UI
-
-Achievement unlocks must come from server-confirmed state.
-
-Flow:
-
-Learning Event
-      │
-      ▼
-Backend Evaluation
-      │
-      ▼
-Achievement Awarded
-      │
-      ▼
-Frontend Notification
-      │
-      ▼
-Achievement UI
-
-Never award an achievement solely because a frontend condition appears satisfied.
+A successful game response may update the UI optimistically, but the final displayed value must reconcile with the authoritative database state.
 
 ---
 
-39. Analytics UI
+37. Challenges
 
-Analytics pages consume server-generated analytics.
+Challenges are database-backed learning experiences.
 
-Examples:
+The frontend may display:
 
-Performance Overview
-Subject Performance
-Lesson Performance
-Mastery
-Weak Areas
-Strong Areas
-Learning Trends
-Game Performance
+Available Challenges
+Challenge Details
+Participation
+Progress
+Results
+Leaderboard
 
-Visualization belongs to the frontend.
-
-Calculation of authoritative metrics belongs to the backend.
+Eligibility and participation authorization remain database responsibilities.
 
 ---
 
-40. Recommendation UI
+38. Social Features
 
-Recommendations should be represented as actionable cards.
+Social functionality may include:
 
-Example:
+Friends
+Challenges
+Leaderboards
+Messaging
 
-Recommendation
-├── Title
-├── Reason
-├── Target
-├── Priority
-└── Action
+The frontend must use the database authorization model for all protected interactions.
 
-The action should navigate to the server-defined target.
+No social relationship is considered valid merely because it exists in client state.
 
 ---
 
-41. Parent UI Architecture
+39. Chat and Realtime
 
-Parent UI is a separate application experience.
+Supabase Realtime is used where realtime synchronization is required.
+
+Potential use cases:
+
+Chat
+Multiplayer game state
+Presence
+Challenge updates
+Notifications
+
+PostgreSQL remains the source of truth.
+
+Realtime is a synchronization mechanism.
+
+The frontend must handle:
+
+connect
+subscribe
+event
+reconnect
+unsubscribe
+
+without treating Realtime events as authoritative data independent of PostgreSQL.
+
+---
+
+40. Multiplayer Games
+
+Multiplayer UI may synchronize through Supabase Realtime.
 
 Conceptually:
 
-Parent Dashboard
-│
-├── Children
-│
-├── Child Selector
-│
-├── Progress
-│
-├── Subject Performance
-│
-├── Mastery
-│
-├── Games
-│
-├── Recommendations
-│
-└── Recent Activity
+Game UI
+   │
+   ├── PostgreSQL
+   │      ↓
+   │   authoritative state
+   │
+   └── Realtime
+          ↓
+       synchronization
 
-The parent must never be able to switch to a student who is not authorized through the backend.
+The frontend must not trust another player's client state.
 
 ---
 
-42. Student Selector
+41. Storage
 
-For parents with multiple children:
+Educational and user assets may be stored in Supabase Storage.
 
-Parent
- │
- ▼
-Authorized Children
- │
- ▼
-Select Child
- │
- ▼
-Load Child Analytics
-
-The frontend should derive the list from the server.
-
-Never accept an arbitrary student ID as proof of relationship.
-
----
-
-43. Administrative UI
-
-Administrative interfaces must be isolated from student UI.
-
-Administrative modules may include:
-
-Tenant Management
-Student Management
-Curriculum
-Lessons
-Content
-Question Bank
-Games
-Reports
-Subscriptions
-Audit
-
-Administrative operations require server authorization.
-
----
-
-44. Content Management UI
-
-Content workflows should expose states such as:
-
-Draft
-Review
-Approved
-Published
-Archived
-
-The UI should make workflow state explicit.
-
-Publishing is a server-side operation.
-
----
-
-45. AI Content UI
-
-AI-generated content must be visually distinguishable from published content during review.
-
-Workflow:
-
-Generate
-  ↓
-Preview
-  ↓
-Validate
-  ↓
-Review
-  ↓
-Approve
-  ↓
-Publish
-
-The frontend must not directly publish AI output without the required backend workflow.
-
----
-
-46. Social UI
-
-Social features may include:
-
-Friends
-Friend Requests
-Profiles
-Messages
-Conversations
-Online Status
-Multiplayer Invitations
-
-All social resources remain subject to tenant and relationship authorization.
-
----
-
-47. Chat Architecture
-
-Chat UI should support:
-
-Conversation List
-Conversation View
-Message Composer
-Message Status
-Unread Count
-Realtime Updates
-
-Message persistence occurs on the backend/database.
-
-Realtime delivers updates.
-
-The frontend must gracefully recover after connection loss.
-
----
-
-48. Realtime Architecture
-
-Realtime subscriptions should be feature-scoped.
+The frontend should use authorized Storage access.
 
 Examples:
 
-notifications
-chat
-challenge
-multiplayer
-leaderboard
+lesson images
+videos
+infographics
+avatars
+attachments
 
-Do not subscribe the entire application to all realtime channels.
+Storage paths and bucket policies are security-sensitive and must conform to the Supabase security model.
 
-Subscriptions must be cleaned up when components unmount or context changes.
-
----
-
-49. Realtime Connection States
-
-The UI should represent:
-
-CONNECTED
-CONNECTING
-DISCONNECTED
-RECONNECTING
-ERROR
-
-Realtime failure must not necessarily make the entire application unusable.
-
-Fallback behavior should exist where appropriate.
+The frontend must never expose private storage credentials.
 
 ---
 
-50. Notifications UI
+42. Edge Functions
 
-Notifications should support:
+Edge Functions are part of the Supabase backend platform.
 
-Unread
-Read
-Mark as Read
-Notification List
-Notification Detail
+The frontend should call an Edge Function when an operation requires:
 
-Realtime notification arrival should update the notification cache.
+- Secret API keys.
+- External APIs.
+- AI providers.
+- Payment providers.
+- Webhooks.
+- Server-side integrations.
+- Other privileged processing that should not run in the browser.
 
----
+Conceptually:
 
-51. Challenge UI
+Frontend
+   ↓
+Supabase Edge Function
+   ↓
+External Service
 
-Challenge experience:
-
-Challenge List
-      │
-      ▼
-Challenge Details
-      │
-      ▼
-Eligibility
-      │
-      ▼
-Join
-      │
-      ▼
-Game
-      │
-      ▼
-Results
-      │
-      ▼
-Leaderboard
-
-The frontend displays eligibility returned by the backend.
+The frontend must never call secret-bearing external APIs directly.
 
 ---
 
-52. Leaderboard UI
+43. AI Features
 
-Leaderboards must be treated as server-generated data.
+AI functionality is optional and must remain controlled.
 
-Display:
+The frontend may provide interfaces for:
 
-Rank
-Player
-Score
-Relevant Metric
+AI-assisted content generation
+AI-assisted explanations
+AI-assisted educational tools
 
-Do not calculate global ranking in the browser.
+But:
 
-For privacy and child safety, only information approved by the backend should be displayed.
+Browser
+   ↓
+Edge Function
+   ↓
+AI Provider
 
----
+The browser must never contain an AI provider secret.
 
-53. Loading State Architecture
-
-Every asynchronous feature should define loading behavior.
-
-Use:
-
-Skeleton
-Spinner
-Progress Indicator
-Disabled Action
-Placeholder
-
-Avoid blank screens during loading.
-
-Differentiate:
-
-initial loading
-background refetch
-mutation pending
-realtime reconnect
+AI-generated educational content remains untrusted until it passes the database/content approval workflow.
 
 ---
 
-54. Error State Architecture
+44. Forms
 
-Every major screen should handle:
+Forms should:
+
+- Validate user input for usability.
+- Provide immediate feedback.
+- Display server/database validation errors.
+- Prevent accidental duplicate submissions.
+- Handle loading states.
+- Preserve accessibility.
+
+Client validation improves UX.
+
+It does not replace database validation.
+
+---
+
+45. Error Handling
+
+The application must normalize Supabase errors into user-facing states.
+
+Conceptually:
+
+Supabase Error
+      ↓
+Error Mapper
+      ↓
+Application Error
+      ↓
+UI Message
+
+Errors should distinguish between:
+
+Authentication error
+Authorization error
+Validation error
+Not found
+Conflict
+Network failure
+Server/database failure
+Unexpected error
+
+Raw database internals should not be unnecessarily exposed to users.
+
+---
+
+46. Loading and Empty States
+
+Every data-driven screen should explicitly handle:
 
 Loading
 Success
@@ -1355,142 +1204,114 @@ Error
 
 Example:
 
-Loading
-   │
-   ├── Success → Content
-   │
-   ├── Empty → Empty State
-   │
-   └── Error → Error State
+Loading → skeleton/spinner
+Success → content
+Empty → meaningful empty state
+Error → recoverable error state
 
-Error messages should be user-readable.
-
-Internal technical details must not be exposed.
+The frontend must not confuse an empty dataset with a failed request.
 
 ---
 
-55. Global Error Boundary
+47. Optimistic UI
 
-The application must have a top-level React error boundary.
+Optimistic updates may be used only for non-authoritative presentation.
 
-It should:
+Examples:
 
-- Prevent total white-screen failure.
-- Log/report the error.
-- Display a recoverable error screen.
-- Provide a retry/reload action.
+- Button interaction.
+- Animation.
+- Temporary visual state.
 
----
+For authoritative operations such as:
 
-56. Forms
+XP
+score
+lesson completion
+game completion
+achievement
+mastery
 
-Forms should use:
-
-Controlled validation
-Schema validation
-Accessible labels
-Inline errors
-Submit states
-Server error mapping
-
-Forms must distinguish:
-
-validation error
-authentication error
-authorization error
-business-rule error
-network error
+the frontend must reconcile with the database result.
 
 ---
 
-57. Accessibility
+48. Caching
 
-Accessibility is mandatory.
+Client-side caching may be used for performance.
 
-The frontend should follow WCAG principles.
+Cached data must have clear invalidation/revalidation rules.
 
-Required practices include:
+Caching must never bypass:
+
+- RLS.
+- Authorization.
+- Tenant boundaries.
+- Freshness requirements for authoritative operations.
+
+Sensitive tenant data must not be accidentally shared across tenant contexts through a global cache key.
+
+Cache keys should include relevant tenant/user/resource identity where required.
+
+---
+
+49. Tenant-Safe Client State
+
+Any client-side store/cache containing tenant-specific data must include tenant context.
+
+Bad:
+
+students
+
+Preferred conceptual form:
+
+tenant:{tenantId}:students
+
+This reduces accidental state leakage when switching tenants.
+
+---
+
+50. URL and Navigation Security
+
+The frontend must assume that users can manually modify:
+
+URL parameters
+query parameters
+resource IDs
+tenant IDs
+game session IDs
+
+Therefore:
+
+URL validation
+
+is not authorization.
+
+The database must reject unauthorized access.
+
+---
+
+51. Accessibility
+
+The frontend should target WCAG-aligned accessibility practices.
+
+Requirements include:
 
 - Semantic HTML.
 - Keyboard navigation.
 - Visible focus states.
 - Accessible labels.
 - Sufficient contrast.
-- Screen-reader support.
-- Reduced-motion support.
-- Accessible error messages.
+- Screen-reader compatibility.
 - Accessible game controls.
+- Reduced-motion considerations.
+- Error messages associated with inputs.
 
-Educational games must not rely solely on animation or color.
-
----
-
-58. Child-Focused UX
-
-The primary student experience targets Egyptian primary-school children.
-
-The UI should therefore prioritize:
-
-Large touch targets
-Simple navigation
-Clear visual hierarchy
-Short instructions
-Immediate feedback
-Readable typography
-Controlled animation
-Low cognitive overload
-
-Gamification should enhance learning rather than distract from it.
+Games must not rely exclusively on color or animation to communicate state.
 
 ---
 
-59. Arabic / English / RTL Architecture
-
-The platform must support bilingual educational content.
-
-The frontend should be prepared for:
-
-Arabic
-English
-
-and:
-
-RTL
-LTR
-
-Direction must be configurable.
-
-Do not hard-code layout assumptions that break under RTL.
-
-Avoid using left/right positioning when logical CSS properties are appropriate.
-
-Prefer:
-
-margin-inline
-padding-inline
-inset-inline
-
-over directional assumptions.
-
----
-
-60. Localization
-
-All interface strings should be externalized.
-
-Avoid:
-
-<button>Start Game</button>
-
-Prefer a translation key architecture:
-
-game.start
-
-Curriculum content itself is data and should not be hard-coded into UI components.
-
----
-
-61. Responsive Design
+52. Responsive Design
 
 The application must support:
 
@@ -1498,959 +1319,673 @@ Mobile
 Tablet
 Desktop
 
-Student game experiences should prioritize touch devices.
+The student experience should be designed mobile-first because educational consumption frequently occurs on smaller screens.
 
-Administrative interfaces may prioritize desktop productivity while remaining usable on smaller screens.
-
----
-
-62. Performance Architecture
-
-Important strategies:
-
-Route-level code splitting
-Lazy loading
-Image optimization
-Virtualized long lists
-Query caching
-Targeted refetching
-Memoization where justified
-Avoid unnecessary rerenders
-
-Games must remain responsive even on lower-end devices.
+Parent and administration interfaces may use more information-dense layouts where appropriate.
 
 ---
 
-63. Media Performance
+53. Performance Principles
 
-Educational media can be large.
+The frontend should prioritize:
 
-Use:
+- Small initial bundles.
+- Route-level code splitting.
+- Lazy loading for heavy game modules.
+- Optimized images.
+- Efficient Supabase queries.
+- Pagination.
+- Avoiding unnecessary re-renders.
+- Reusing fetched data.
+- Avoiding large raw analytics payloads.
 
-Lazy loading
-Responsive images
-CDN delivery
-Poster images
-Progressive loading
-
-Video should not automatically preload every resource on a lesson page.
-
----
-
-64. Security Rules
-
-The frontend must never contain:
-
-Supabase service-role key
-Database password
-Private API secret
-Payment secret
-AI provider secret
-Webhook secret
-
-Public environment variables must contain only safe client-side configuration.
+Games should load only the assets required for the active game.
 
 ---
 
-65. Client-Side Security Assumption
+54. Game Loading Strategy
 
-Everything in the browser must be considered potentially manipulable.
+Game-specific code may be lazy loaded.
 
-Therefore:
+Conceptually:
 
-Hidden UI ≠ Security
-Disabled Button ≠ Authorization
-Route Guard ≠ Authorization
-Local State ≠ Truth
+Student enters game
+        ↓
+Load game shell
+        ↓
+Identify game type
+        ↓
+Load game renderer
+        ↓
+Start/recover session
+        ↓
+Render question
 
-The backend and database enforce security.
-
----
-
-66. Game Security
-
-The frontend must assume that a malicious user can modify:
-
-JavaScript
-Network requests
-Timers
-Displayed score
-Displayed XP
-Local storage
-
-Therefore the frontend must never be the source of truth for game results.
+This prevents all game implementations from increasing the initial application bundle.
 
 ---
 
-67. Local Storage
+55. Security Rules
 
-Local storage may contain non-sensitive UI preferences.
+The frontend must never:
 
-Do not store sensitive authorization information or secrets in local storage.
-
-Avoid storing authoritative:
-
-XP
-score
-lesson completion
-achievement state
-
-as trusted state.
-
----
-
-68. Offline Behavior
-
-Offline support may be introduced incrementally.
-
-The initial architecture should support graceful network failure.
-
-Do not allow offline mode to fabricate authoritative learning results.
-
-If offline learning is introduced later:
-
-Offline Event
-    ↓
-Local Queue
-    ↓
-Sync
-    ↓
-Server Validation
-    ↓
-Authoritative Result
+1. Contain a service-role key.
+2. Contain database passwords.
+3. Contain private API keys.
+4. Trust client-side authorization.
+5. Trust client-side tenant IDs.
+6. Expose question answer keys.
+7. Calculate authoritative XP.
+8. Calculate authoritative score.
+9. Bypass approved RPC/database operations.
+10. Store authoritative learning state only in local storage.
 
 ---
 
-69. API Error Mapping
+56. Environment Configuration
 
-Backend errors should be normalized into frontend-safe categories.
+Development and production environments must use environment variables.
 
 Example:
 
-401 → Authentication Required
-403 → Access Denied
-404 → Resource Not Found
-409 → Conflict
-422 → Validation Error
-429 → Rate Limited
-5xx → Server Error
+VITE_SUPABASE_URL=
+VITE_SUPABASE_PUBLISHABLE_KEY=
 
-Business error codes should be displayed through localized messages.
+".env" files containing secrets must not be committed.
+
+A safe ".env.example" should document required variables without real credentials.
 
 ---
 
-70. Navigation Error Handling
+57. Deployment Architecture
 
-If a resource is unavailable:
+The frontend is deployed on Vercel.
 
-Not Found
+Conceptually:
 
-If the user lacks permission:
+GitHub
+   │
+   ▼
+Vercel
+   │
+   ▼
+TheTutor Frontend
+   │
+   ▼
+Supabase
 
-Access Denied
+Vercel hosts the browser application.
 
-If authentication expires:
+Supabase provides the application backend platform.
 
-Session Expired
-
-Avoid redirect loops.
-
----
-
-71. Analytics Tracking
-
-Frontend interaction tracking may record UI events.
-
-Examples:
-
-page_view
-lesson_opened
-game_opened
-button_clicked
-
-However, learning-critical events should be confirmed by backend/domain events.
-
-Do not treat a browser analytics event as proof that a lesson was completed.
+No separate FastAPI deployment is required for the initial architecture.
 
 ---
 
-72. Testing Strategy
+58. Vercel Environment Variables
 
-Frontend testing should exist at multiple levels.
+Production deployment must configure the Supabase public client variables in Vercel.
 
-Unit Tests
+Only browser-safe values may use the "VITE_" public environment-variable mechanism.
 
-Test:
-
-utilities
-formatters
-validators
-pure components
-hooks
-
-Component Tests
-
-Test:
-
-forms
-lesson rendering
-question rendering
-game controls
-loading states
-error states
-
-Integration Tests
-
-Test:
-
-authentication flow
-tenant switching
-API interactions
-game flow
-parent child selection
-
-End-to-End Tests
-
-Test critical user journeys:
-
-Login
-↓
-Select Tenant
-↓
-Open Curriculum
-↓
-Open Lesson
-↓
-Complete Lesson
-↓
-Start Game
-↓
-Answer Questions
-↓
-Receive Results
-↓
-View Progress
+Privileged secrets must remain server-side in Supabase Edge Functions or other appropriate managed infrastructure.
 
 ---
 
-73. Security Testing
+59. Build and Verification
 
-Frontend security testing should verify:
+Before deployment, the frontend must pass:
 
-unauthorized routes
-role-based UI
-tenant switching behavior
-expired sessions
-malformed API responses
-correct-answer leakage
-sensitive data exposure
-
-The primary tenant isolation tests remain backend/database tests.
-
----
-
-74. Environment Configuration
-
-Frontend environments should support:
-
-development
-staging
-production
-
-Example configuration categories:
-
-VITE_API_BASE_URL
-VITE_SUPABASE_URL
-VITE_SUPABASE_ANON_KEY
-
-Only public client-safe values may use "VITE_" variables.
-
----
-
-75. Build Architecture
-
-Production build should:
-
-Type-check
+TypeScript compilation
 Lint
-Run tests
-Build assets
-Generate production bundle
+Production build
 
-CI should fail if critical frontend checks fail.
+Where tests exist:
 
----
+Unit tests
+Integration tests
+Game-flow tests
+Authentication tests
 
-76. Deployment
-
-The frontend is designed to be deployable to a CDN-oriented platform such as Vercel.
-
-Deployment flow:
-
-Git Push
-   │
-   ▼
-CI
-   │
-   ├── Type Check
-   ├── Lint
-   ├── Tests
-   └── Build
-   │
-   ▼
-Deployment
-   │
-   ▼
-Production
+The application should also be verified in a real browser environment.
 
 ---
 
-77. Frontend Domain Boundaries
+60. Database Contract Verification
 
-The following boundaries are mandatory:
+The frontend must compile against the current generated Supabase database types.
 
-UI Components
-      ↓
-Feature Hooks
-      ↓
-Feature Services / Queries
-      ↓
-API Client
-      ↓
-Backend API
+The following must be verified before frontend implementation is considered complete:
 
-Avoid:
-
-Component
-   ↓
-Direct database manipulation
-
-Avoid putting business rules into presentational components.
+Auth
+Memberships
+Tenant context
+Student identity
+Parent-child access
+Curriculum
+Lessons
+Progress
+Games
+Questions
+XP
+Analytics
+Realtime
+Storage
 
 ---
 
-78. Component Architecture
+61. Frontend-to-Database Contract
 
-Components should be classified as:
+The primary browser communication pattern is:
 
-UI Component
-Layout Component
-Feature Component
-Page Component
+React
+  │
+  ├── Supabase Auth
+  │
+  ├── Supabase Query
+  │
+  ├── Supabase RPC
+  │
+  ├── Supabase Realtime
+  │
+  └── Supabase Storage
 
-UI Component
+Edge Functions are used when the operation requires a server-side execution boundary.
 
-Generic and reusable.
+There is no application-specific REST API requirement in the initial architecture.
+
+---
+
+62. Authoritative Operations
+
+The following operations must remain database/server authoritative:
+
+Tenant authorization
+Student eligibility
+Lesson completion
+Game session creation
+Question selection
+Answer evaluation
+Score calculation
+XP calculation
+Achievement evaluation
+Streak calculation
+Mastery calculation
+Analytics derivation
+Parent-child authorization
+Challenge eligibility
+Multiplayer authoritative state
+
+The frontend only initiates requests and renders results.
+
+---
+
+63. Frontend State Categories
+
+Frontend state should be divided conceptually into:
+
+Server State
+
+Data originating from Supabase:
+
+student profile
+curriculum
+lessons
+progress
+analytics
+game session
+challenge
+notifications
+
+Authentication State
+
+session
+user
+membership
+current tenant
+
+UI State
+
+modal
+sidebar
+selected tab
+loading animation
+temporary form values
+
+Game Interaction State
+
+selected answer
+animation
+timer display
+current presentation step
+
+The distinction prevents accidental treatment of UI state as authoritative application state.
+
+---
+
+64. Feature Module Contract
+
+Each feature should preferably contain:
+
+feature/
+├── api.ts
+├── hooks.ts
+├── types.ts
+├── components/
+├── pages/
+└── index.ts
+
+Not every feature requires every file.
+
+The goal is to keep feature-specific behavior together and reduce cross-feature coupling.
+
+---
+
+65. Component Architecture
+
+Components should generally follow:
+
+Page
+ ↓
+Feature Container
+ ↓
+Feature Components
+ ↓
+Reusable UI Components
+
+Reusable UI components must not contain feature-specific business logic.
 
 Example:
 
 Button
-Modal
 Card
-Input
+Modal
+Table
+Tabs
 ProgressBar
 
-Feature Component
-
-Domain-specific.
-
-Example:
-
-LessonCard
-GameQuestion
-AchievementCard
-SubjectProgress
-
-Page Component
-
-Combines features into a route-level experience.
+remain generic.
 
 ---
 
-79. Avoid God Components
+66. Hooks
 
-A component should not simultaneously handle:
+Hooks may encapsulate:
 
-API calls
-authentication
-tenant resolution
-business calculations
-routing
-complex rendering
-animations
+- Supabase queries.
+- Realtime subscriptions.
+- Auth state.
+- Tenant context.
+- UI behavior.
+- Game presentation state.
 
-Split responsibilities.
-
----
-
-80. Hooks Architecture
-
-Hooks should encapsulate reusable frontend behavior.
-
-Examples:
-
-useAuth()
-useTenant()
-useStudent()
-useLessons()
-useLessonProgress()
-useGameSession()
-useSubmitAnswer()
-useParentChildren()
-useNotifications()
-useRealtime()
-
-Hooks should not silently bypass the API architecture.
+Hooks must not bypass the database security model.
 
 ---
 
-81. Service Architecture
+67. No Duplicate Business Logic
 
-Services represent communication or reusable application operations.
+The frontend must not duplicate database business rules.
 
-Example:
+For example, if the database decides:
 
-features/games/
-    queries/
-    mutations/
+whether a student is eligible
 
-A service should not contain presentation code.
+the frontend may display eligibility state but must not implement a second independent eligibility algorithm.
 
----
-
-82. State Ownership Rules
-
-Use the narrowest appropriate scope.
-
-Component State
-    ↓
-Feature State
-    ↓
-Application State
-
-Do not promote state globally without justification.
-
-Server data belongs to server-state management.
+This prevents divergence between UI behavior and authoritative state.
 
 ---
 
-83. Modal and Overlay Architecture
+68. Observability
 
-Global overlays should be managed centrally only when necessary.
+The frontend should provide enough information to diagnose:
 
-Examples:
+- Authentication failures.
+- Database query failures.
+- RPC failures.
+- Realtime disconnections.
+- Asset-loading failures.
+- Game-state synchronization problems.
 
-Achievement Unlock
-Notification
-Confirm Action
-Game Result
-
-Feature-specific dialogs should remain within their feature.
-
----
-
-84. Design System
-
-The platform should use a consistent design system.
-
-It should define:
-
-Typography
-Spacing
-Buttons
-Cards
-Inputs
-Colors
-Icons
-Feedback
-Navigation
-Game UI
-
-Student UI and administrative UI may use different visual densities while sharing core tokens.
-
----
-
-85. Animation Architecture
-
-Animations should be purposeful.
-
-Good uses:
-
-Game feedback
-Achievement unlock
-Progress completion
-Navigation transitions
-Reward presentation
-
-Avoid excessive animation that interferes with learning.
-
-Support:
-
-prefers-reduced-motion
-
----
-
-86. Game-Specific UX
-
-Games should provide:
-
-Clear objective
-Current progress
-Current question
-Answer state
-Immediate or controlled feedback
-Time information when relevant
-Exit behavior
-Completion state
-
-Accidental exits should be handled gracefully.
-
----
-
-87. Game Session Recovery
-
-If the browser refreshes or network connectivity changes during a game:
-
-Reload
-  ↓
-Authenticate
-  ↓
-Recover Session
-  ↓
-Request Current Server State
-  ↓
-Resume or Finish
-
-Do not reconstruct game state solely from browser memory.
-
----
-
-88. Parent Data Privacy
-
-Parent screens should expose only information authorized by the backend.
-
-Avoid displaying unnecessary sensitive student information.
-
-Use privacy-conscious summaries where detailed data is not necessary.
-
----
-
-89. Admin Safety
-
-Destructive administrative actions require confirmation.
-
-Examples:
-
-Delete
-Suspend
-Unpublish
-Remove Membership
-Cancel Subscription
-
-The UI should clearly communicate consequences.
-
-Server authorization remains mandatory.
-
----
-
-90. Empty States
-
-Every collection should have a meaningful empty state.
-
-Examples:
-
-No lessons available.
-No games available yet.
-No achievements earned yet.
-No notifications.
-No friends yet.
-No children linked yet.
-
-Empty states should provide the next useful action where appropriate.
-
----
-
-91. Pagination
-
-Large datasets should use server-side pagination.
-
-Examples:
-
-Students
-Lessons
-Questions
-Notifications
-Messages
-Audit Logs
-Leaderboard
-
-Do not load unbounded collections into the browser.
-
----
-
-92. Infinite Scroll
-
-Infinite scrolling may be used for:
-
-messages
-notifications
-activity feeds
-
-Do not use infinite scroll where explicit pagination provides better usability, especially administrative tables.
-
----
-
-93. Search and Filtering
-
-Search/filter state should be URL-addressable where useful.
-
-Example:
-
-/admin/students?search=ahmed&status=active
-
-The backend should perform large-dataset filtering.
-
-The frontend should not download an entire dataset merely to filter it locally.
-
----
-
-94. Frontend Observability
-
-The frontend should support:
-
-Error reporting
-Performance monitoring
-Request IDs
-User-safe diagnostics
-
-Never send secrets or sensitive information to monitoring systems.
-
----
-
-95. Logging
-
-Development logging may be verbose.
-
-Production logging should be controlled.
-
-Never log:
+Production logs must not contain:
 
 passwords
 tokens
-service-role keys
-payment secrets
-private messages
-correct answers
-sensitive student information
+service keys
+private secrets
 
 ---
 
-96. Dependency Rules
+69. Testing Strategy
 
-Before adding a dependency:
+The frontend testing strategy should eventually cover:
 
-1. Verify the feature cannot reasonably be implemented with existing tools.
-2. Check bundle impact.
-3. Check maintenance status.
-4. Check TypeScript compatibility.
-5. Check security considerations.
-6. Document its purpose.
+Authentication
 
-Avoid dependency duplication.
+login
+logout
+session recovery
+expired session
 
----
+Authorization UX
 
-97. Legacy Frontend Migration
+role-based routing
+tenant switching
+unauthorized UI states
 
-The existing frontend must be audited before major replacement.
-
-Every existing component/file should be classified:
-
-KEEP
-REFACTOR
-REPLACE
-DELETE
-
-Do not preserve legacy architecture merely to avoid rewriting code.
-
-Do not delete working functionality without confirming its replacement.
-
----
-
-98. Migration Sequence
-
-Recommended frontend implementation order:
-
-1. Frontend Foundation
-       ↓
-2. Authentication
-       ↓
-3. Tenant Context
-       ↓
-4. Application Shell
-       ↓
-5. Curriculum Navigation
-       ↓
-6. Lesson Experience
-       ↓
-7. Progress
-       ↓
-8. Question Rendering
-       ↓
-9. Game Engine UI
-       ↓
-10. Gamification
-       ↓
-11. Analytics
-       ↓
-12. Parent Dashboard
-       ↓
-13. Challenges
-       ↓
-14. Notifications
-       ↓
-15. Social / Chat
-       ↓
-16. Admin
-       ↓
-17. AI Content Management
-       ↓
-18. Production Hardening
-
----
-
-99. Minimum Student Learning Experience
-
-The first complete frontend learning loop must support:
-
-Login
-  ↓
-Tenant Context
-  ↓
-Student Dashboard
-  ↓
 Curriculum
-  ↓
-Subject
-  ↓
-Unit
-  ↓
-Lesson
-  ↓
-Lesson Content
-  ↓
-Completion
-  ↓
-Eligible Game
-  ↓
-Question
-  ↓
-Answer
-  ↓
-Server Result
-  ↓
-Score / XP
-  ↓
+
+grade
+term
+subject
+unit
+lesson
+
+Games
+
+start
+question display
+answer submission
+completion
+recovery
+
+Parent
+
+authorized child
+unauthorized child
+
+Responsive UI
+
+mobile
+tablet
+desktop
+
+---
+
+70. Tenant Isolation Testing
+
+The frontend test suite must include scenarios where:
+
+User belongs to Tenant A
+
+and attempts to access:
+
+Tenant B resource
+
+The expected result is denial from the Supabase security layer.
+
+The frontend must never assume that a hidden route is sufficient.
+
+---
+
+71. Game Security Testing
+
+Tests should verify that a student cannot:
+
+submit another student's session
+request an unauthorized question
+submit an answer twice
+complete another student's session
+obtain the answer key through normal question queries
+
+These are database/security invariants, but the frontend integration must be tested against them.
+
+---
+
+72. Error Recovery
+
+The frontend should provide recovery mechanisms where appropriate:
+
+Retry
+Reload
+Return to dashboard
+Reconnect
+Resume game
+Sign in again
+
+Recovery must not silently repeat an authoritative mutation that could cause duplicate effects.
+
+---
+
+73. Offline and Network Failure
+
+The initial architecture does not make the browser an offline source of truth.
+
+If the network fails:
+
+show connection state
+preserve safe UI state
+retry where appropriate
+reconcile with Supabase
+
+Authoritative game/progress mutations must not be simulated permanently offline.
+
+---
+
+74. Frontend Architectural Boundaries
+
+The frontend owns:
+
+Presentation
+Interaction
+Navigation
+UI state
+Client validation
+Accessibility
+Responsive behavior
+Realtime presentation
+
+Supabase owns:
+
+Authentication
+Authorization
+Tenant isolation
+Persistent state
+Transactional operations
+Game authority
+Analytics facts
+Derived learning state
+
+Edge Functions own operations requiring:
+
+Secrets
+External APIs
+AI
+Webhooks
+Privileged integrations
+
+---
+
+75. Final Architecture
+
+The final runtime architecture is:
+
+                         ┌──────────────────────┐
+                         │       GitHub         │
+                         │ Frontend Source      │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │       Vercel        │
+                         │ React + TypeScript   │
+                         │ Vite Build           │
+                         └──────────┬───────────┘
+                                    │
+                              HTTPS / WebSocket
+                                    │
+                                    ▼
+        ┌────────────────────────────────────────────────────┐
+        │                     SUPABASE                        │
+        │                                                    │
+        │  ┌──────────────┐      ┌────────────────────────┐  │
+        │  │ Supabase Auth│      │ PostgreSQL             │  │
+        │  │              │      │                        │  │
+        │  │ Identity     │      │ Source of Truth        │  │
+        │  └──────┬───────┘      │ RLS                    │  │
+        │         │              │ Functions / RPC        │  │
+        │         │              │ Views / Analytics      │  │
+        │         │              └───────────┬────────────┘  │
+        │         │                          │               │
+        │  ┌──────▼───────┐      ┌──────────▼────────────┐  │
+        │  │ Realtime     │      │ Storage               │  │
+        │  │              │      │ Educational Assets    │  │
+        │  │ Multiplayer  │      │ User Assets            │  │
+        │  │ Chat         │      └────────────────────────┘  │
+        │  └──────────────┘                                  │
+        │                                                    │
+        │  ┌──────────────────────────────────────────────┐  │
+        │  │ Edge Functions                               │  │
+        │  │ AI / External APIs / Webhooks / Secrets      │  │
+        │  └──────────────────────────────────────────────┘  │
+        └────────────────────────────────────────────────────┘
+
+The browser is the presentation layer.
+
+Vercel hosts the frontend.
+
+Supabase is the managed backend platform.
+
+PostgreSQL is the source of truth.
+
+RLS is the primary authorization boundary.
+
+Database Functions/RPCs provide trusted transactional operations.
+
+Realtime provides synchronization.
+
+Storage provides asset management.
+
+Edge Functions provide controlled server-side execution when secrets or external services are required.
+
+---
+
+76. Non-Negotiable Rules
+
+The following rules are mandatory:
+
+1. No FastAPI/Python application backend in the initial architecture.
+2. No service-role key in frontend code.
+3. No database password in frontend code.
+4. No client-side authorization as a security mechanism.
+5. No client-side tenant isolation as a security mechanism.
+6. No direct exposure of question answer keys to students.
+7. No authoritative score calculation in the browser.
+8. No authoritative XP calculation in the browser.
+9. No authoritative mastery calculation in the browser.
+10. No arbitrary lesson completion mutation from the browser.
+11. No bypassing RLS through insecure database access.
+12. No independent frontend database model.
+13. No unrestricted loading of large raw analytics datasets.
+14. No treating Realtime as the source of truth.
+15. No secret-bearing external API calls directly from the browser.
+16. Generated Supabase TypeScript types are the frontend database contract.
+17. Every tenant-sensitive client cache/state must be tenant-aware.
+18. Game operations must use the trusted database game flow.
+19. Frontend implementation must remain compatible with "DATABASE_SCHEMA_MASTER_PLAN.md".
+20. Architecture changes must be documented before implementation when they alter system boundaries.
+
+---
+
+77. Implementation Order
+
+Frontend implementation should proceed in this order:
+
+1. Vite + React + TypeScript foundation
+        ↓
+2. Supabase client
+        ↓
+3. Generated database types
+        ↓
+4. Authentication
+        ↓
+5. Session handling
+        ↓
+6. Tenant context
+        ↓
+7. Role-aware routing
+        ↓
+8. Shared UI/layout
+        ↓
+9. Curriculum browsing
+        ↓
+10. Lesson/content rendering
+        ↓
+11. Student progress
+        ↓
+12. Game engine UI
+        ↓
+13. XP / achievements / streak UI
+        ↓
+14. Parent dashboard
+        ↓
+15. Analytics
+        ↓
+16. Challenges/social/realtime
+        ↓
+17. Administration
+        ↓
+18. Production verification
+        ↓
+19. Vercel deployment
+
+Features should be implemented incrementally and verified against the live Supabase contract.
+
+---
+
+78. Definition of Done
+
+The frontend architecture is considered successfully implemented when:
+
+React + TypeScript application
+        ↓
+Supabase authentication
+        ↓
+Tenant-aware authorization
+        ↓
+RLS-protected data access
+        ↓
+Curriculum
+        ↓
+Lessons
+        ↓
 Progress
+        ↓
+Games
+        ↓
+Analytics
+        ↓
+Parent experience
+        ↓
+Realtime where required
+        ↓
+Production build
+        ↓
+Vercel deployment
 
-This is the first critical vertical slice.
-
----
-
-100. Frontend Critical Invariants
-
-Invariant 1
-
-The browser is never the authority for security.
-
-Invariant 2
-
-The browser is never the authority for score.
-
-Invariant 3
-
-The browser is never the authority for XP.
-
-Invariant 4
-
-The browser is never the authority for lesson completion.
-
-Invariant 5
-
-The browser must never receive hidden correct answers.
-
-Invariant 6
-
-Tenant-sensitive cache entries must include tenant context.
-
-Invariant 7
-
-Parent UI must operate only on server-authorized children.
-
-Invariant 8
-
-Realtime subscriptions must be scoped and cleaned up.
-
-Invariant 9
-
-All protected API requests require authenticated credentials.
-
-Invariant 10
-
-Frontend implementation must conform to the API Contract.
+works without introducing a separate application backend or duplicating authoritative database logic.
 
 ---
 
-101. Definition of Done
+79. Final Architectural Statement
 
-The frontend architecture is considered correctly implemented when:
+TheTutor is a React + TypeScript application deployed on Vercel and backed directly by the Supabase platform.
 
-- [ ] React + TypeScript foundation exists.
-- [ ] Routing is centralized.
-- [ ] Authentication state is handled correctly.
-- [ ] Tenant context exists.
-- [ ] Server-state management is implemented.
-- [ ] API communication is centralized.
-- [ ] API responses are typed.
-- [ ] Protected routes exist.
-- [ ] Curriculum navigation follows the database hierarchy.
-- [ ] Lesson rendering is content-type driven.
-- [ ] Lesson completion is server-authoritative.
-- [ ] Game UI uses server-created sessions.
-- [ ] Correct answers are not exposed.
-- [ ] Score and XP come from the server.
-- [ ] Progress uses server state.
-- [ ] Parent access is server-authorized.
-- [ ] Realtime subscriptions are properly scoped.
-- [ ] Notifications work without breaking normal application behavior.
-- [ ] Arabic/English and RTL/LTR are supported by the architecture.
-- [ ] Mobile/tablet/desktop layouts are supported.
-- [ ] Accessibility requirements are implemented.
-- [ ] Error/loading/empty states exist.
-- [ ] Frontend tests cover the critical learning loop.
-- [ ] Production build passes.
-- [ ] No secrets are exposed.
-- [ ] No legacy architecture violates the approved system architecture.
+The browser is responsible for presentation and interaction.
 
----
+Supabase Auth provides identity.
 
-102. Mandatory Instructions for AI Coding Agents
+PostgreSQL provides authoritative application state.
 
-Any AI coding agent modifying the frontend MUST:
+RLS provides tenant and resource authorization.
 
-1. Read "DATABASE_SCHEMA_MASTER_PLAN.md".
-2. Read "PROJECT_ARCHITECTURE.md".
-3. Read "FRONTEND_ARCHITECTURE.md".
-4. Read "API_CONTRACT.md" when implementing API communication.
-5. Inspect the existing frontend before modifying it.
-6. Never invent database tables.
-7. Never invent API response structures.
-8. Never implement backend business rules inside the frontend.
-9. Never calculate authoritative score locally.
-10. Never calculate authoritative XP locally.
-11. Never trust client-side tenant ownership.
-12. Never expose correct answers.
-13. Never place secrets in frontend code.
-14. Preserve tenant boundaries.
-15. Use typed API contracts.
-16. Handle loading, empty, and error states.
-17. Test critical user flows after changes.
-18. Report architectural contradictions before implementing questionable behavior.
-19. Avoid unnecessary global state.
-20. Avoid unnecessary dependencies.
-21. Do not delete legacy code without auditing its functionality.
-22. Prefer incremental vertical slices over disconnected UI development.
+Database Functions/RPCs provide trusted transactional operations.
 
----
+Supabase Realtime provides synchronization.
 
-103. Relationship to Backend Architecture
+Supabase Storage provides assets.
 
-The frontend depends on the backend through the API Contract.
+Supabase Edge Functions provide controlled server-side execution for secrets and external integrations.
 
-Frontend
-   │
-   │ API Contract
-   ▼
-Backend
-   │
-   ▼
-Database
-
-The frontend must not depend on backend implementation details such as:
-
-database queries
-internal repository structure
-private service logic
-database credentials
-
-Only the public API contract is consumed.
-
----
-
-104. Relationship to Database Architecture
-
-The frontend does not directly redefine database entities.
-
-Instead:
-
-Database Contract
-       ↓
-Backend Domain Model
-       ↓
-API Response
-       ↓
-Frontend View Model
-       ↓
-UI
-
-A frontend view model may differ from a database row for presentation purposes.
-
-It must not contradict the underlying domain meaning.
-
----
-
-105. Final Frontend Architecture Summary
-
-TheTutor frontend is:
-
-React + TypeScript
-        │
-        ▼
-Application Shell
-        │
-        ├── Authentication
-        ├── Tenant Context
-        ├── Routing
-        └── Global UI
-        │
-        ▼
-Feature Modules
-        │
-        ├── Curriculum
-        ├── Lessons
-        ├── Progress
-        ├── Games
-        ├── Gamification
-        ├── Analytics
-        ├── Parent
-        ├── Challenges
-        ├── Social
-        ├── Notifications
-        └── Admin
-        │
-        ▼
-Typed API Layer
-        │
-        ▼
-FastAPI Backend
-        │
-        ▼
-Supabase
-
-The frontend is a presentation and interaction layer.
-
-The backend and database remain authoritative for business rules, security, progress, scoring, eligibility, XP, and tenant isolation.
-
----
-
-END OF FRONTEND ARCHITECTURE
+This architecture is intentionally simple for the initial product while remaining extensible for future educational, gaming, analytics, AI, and SaaS capabilities.
