@@ -330,6 +330,10 @@ export async function getCurrentParentStudents(): Promise<
     return [];
   }
 
+  /*
+   * tenant_parent_students.student_profile_id references
+   * profiles.id, not tenant_student_profiles.id.
+   */
   const studentProfileIds = [
     ...new Set(
       links.map((link) => link.student_profile_id),
@@ -341,16 +345,16 @@ export async function getCurrentParentStudents(): Promise<
     .select(
       'id, tenant_id, profile_id, student_code, display_name, grade_id, date_of_birth, avatar_url, xp, level, is_active, deleted_at, created_at, updated_at',
     )
-    .in('id', studentProfileIds)
+    .in('profile_id', studentProfileIds)
     .eq('is_active', true)
     .is('deleted_at', null);
 
   const students =
     (await throwIfError(studentsResult)) ?? [];
 
-  const studentsById = new Map(
+  const studentsByProfileId = new Map(
     students.map((student) => [
-      student.id,
+      student.profile_id,
       student,
     ]),
   );
@@ -358,7 +362,7 @@ export async function getCurrentParentStudents(): Promise<
   return links.map((link) => ({
     ...link,
     student:
-      studentsById.get(link.student_profile_id) ?? null,
+      studentsByProfileId.get(link.student_profile_id) ?? null,
   }));
 }
 
@@ -506,9 +510,14 @@ export async function getLessonProgress(
   lessonId: number,
   studentProfileId?: string,
 ): Promise<LessonProgress | null> {
+  /*
+   * lesson_progress.student_profile_id references the
+   * student's profile identity (profiles.id), not the
+   * tenant_student_profiles.id persona identifier.
+   */
   const resolvedStudentProfileId =
     studentProfileId ??
-    (await getCurrentStudentProfiles()).at(0)?.id;
+    (await getCurrentStudentProfiles()).at(0)?.profile_id;
 
   if (!resolvedStudentProfileId) {
     return null;
@@ -516,8 +525,8 @@ export async function getLessonProgress(
 
   const studentProfileResult = await supabase
     .from('tenant_student_profiles')
-    .select('id, tenant_id')
-    .eq('id', resolvedStudentProfileId)
+    .select('profile_id, tenant_id')
+    .eq('profile_id', resolvedStudentProfileId)
     .maybeSingle();
 
   const studentProfile =
@@ -532,7 +541,10 @@ export async function getLessonProgress(
     .select(
       'id, student_profile_id, lesson_id, tenant_id, status, completion_percent, first_started_at, completed_at, last_accessed_at, time_spent_seconds, updated_at',
     )
-    .eq('student_profile_id', resolvedStudentProfileId)
+    .eq(
+      'student_profile_id',
+      resolvedStudentProfileId,
+    )
     .eq('tenant_id', studentProfile.tenant_id)
     .eq('lesson_id', lessonId)
     .maybeSingle();
