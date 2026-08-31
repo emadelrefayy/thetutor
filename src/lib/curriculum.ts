@@ -4,11 +4,22 @@ import {
   getSubjectsByTerm,
   getUnitsBySubject,
   getLessonsByUnit,
+  getLessonById,
+  getLessonAssets,
+  getLessonContentBlocks,
+  getLessonProgress,
+  getLessonGame,
+  getUnitGame,
+  getSubjectGame,
   type Grade,
   type Term,
   type Subject,
   type Unit,
   type Lesson,
+  type LessonAsset,
+  type LessonContentBlock,
+  type LessonProgress,
+  type GameDefinition,
 } from './database';
 
 export type CurriculumTree = {
@@ -23,6 +34,14 @@ export type CurriculumTree = {
       }>;
     }>;
   }>;
+};
+
+export type LessonDetails = {
+  lesson: Lesson;
+  assets: LessonAsset[];
+  contentBlocks: LessonContentBlock[];
+  progress: LessonProgress | null;
+  game: GameDefinition | null;
 };
 
 export async function loadGrades(): Promise<Grade[]> {
@@ -53,15 +72,61 @@ export async function loadLessons(
   return getLessonsByUnit(unitId);
 }
 
+export async function loadLessonDetails(
+  lessonId: number,
+): Promise<LessonDetails> {
+  const lesson = await getLessonById(lessonId);
+
+  if (!lesson) {
+    throw new Error(`Lesson ${lessonId} was not found.`);
+  }
+
+  const [
+    assets,
+    contentBlocks,
+    progress,
+    game,
+  ] = await Promise.all([
+    getLessonAssets(lessonId),
+    getLessonContentBlocks(lessonId),
+    getLessonProgress(lessonId),
+    getLessonGame(lessonId),
+  ]);
+
+  return {
+    lesson,
+    assets,
+    contentBlocks,
+    progress,
+    game,
+  };
+}
+
+export async function loadUnitGame(
+  unitId: number,
+): Promise<GameDefinition | null> {
+  return getUnitGame(unitId);
+}
+
+export async function loadSubjectGame(
+  subjectId: number,
+): Promise<GameDefinition | null> {
+  return getSubjectGame(subjectId);
+}
+
 export async function loadCurriculumTree(
   gradeId: number,
 ): Promise<CurriculumTree> {
   const [gradeResult, terms] = await Promise.all([
     getGrades().then((grades) => {
-      const grade = grades.find((item) => item.id === gradeId);
+      const grade = grades.find(
+        (item) => item.id === gradeId,
+      );
 
       if (!grade) {
-        throw new Error(`Grade ${gradeId} was not found.`);
+        throw new Error(
+          `Grade ${gradeId} was not found.`,
+        );
       }
 
       return grade;
