@@ -377,22 +377,6 @@ function SubjectsPage() {
     parsedTermId,
   ]);
 
-  const termsPath =
-    `/grades/${parsedGradeId}/terms?${new URLSearchParams(
-      {
-        ...(state.status !== 'error'
-          ? {
-              tenantId:
-                state.context
-                  ?.tenantId ?? '',
-              studentProfileId:
-                state.context
-                  ?.studentProfileId ?? '',
-            }
-          : {}),
-      },
-    ).toString()}`;
-
   if (state.status === 'loading') {
     return (
       <main
@@ -443,16 +427,23 @@ function SubjectsPage() {
     );
   }
 
-  const {
-    subjects,
-    context,
-    termTitle,
-  } = state;
-
-  const subjectsPath =
-    `/grades/${parsedGradeId}/terms/${parsedTermId}/subjects`;
-
   if (state.status === 'empty') {
+    const {
+      context,
+      termTitle,
+      message,
+    } = state;
+
+    const termsPath =
+      `/grades/${parsedGradeId}/terms?${new URLSearchParams(
+        {
+          tenantId:
+            context.tenantId,
+          studentProfileId:
+            context.studentProfileId,
+        },
+      ).toString()}`;
+
     return (
       <main
         id="subjects-page"
@@ -486,13 +477,32 @@ function SubjectsPage() {
               role="status"
               className="text-sm leading-7 text-slate-600"
             >
-              {state.message}
+              {message}
             </p>
           </section>
         </div>
       </main>
     );
   }
+
+  const {
+    subjects,
+    context,
+    termTitle,
+  } = state;
+
+  const termsPath =
+    `/grades/${parsedGradeId}/terms?${new URLSearchParams(
+      {
+        tenantId:
+          context.tenantId,
+        studentProfileId:
+          context.studentProfileId,
+      },
+    ).toString()}`;
+
+  const subjectsPath =
+    `/grades/${parsedGradeId}/terms/${parsedTermId}/subjects`;
 
   return (
     <main
@@ -614,8 +624,4 @@ function SubjectsPage() {
           )}
         </section>
       </div>
-    </main>
-  );
-}
-
-export default SubjectsPage;
+   
