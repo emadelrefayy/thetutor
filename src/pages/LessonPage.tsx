@@ -1148,9 +1148,7 @@ function LessonPage() {
 
   const {
     lessons,
-    lesson,
-    assets,
-    contentBlocks,
+    lesson, 
     progress,
     game,
     context,
