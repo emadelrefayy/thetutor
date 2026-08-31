@@ -1,763 +1,883 @@
-🎓 TheTutor
+TheTutor
 
-Interactive Multi-Tenant Educational SaaS for Egyptian Primary Education
+TheTutor is a multi-tenant educational SaaS platform designed to provide structured learning, interactive lessons, educational games, progress tracking, analytics, and parent/student experiences.
 
-TheTutor is a multi-tenant educational platform designed for Egyptian primary-school students, with a strong focus on interactive learning, educational games, measurable progress, mastery, analytics, and parent visibility.
+The initial production architecture is intentionally simple:
 
-The platform is designed primarily for Grades 1–6 and can support multiple educational organizations (schools, educational centers, and other tenants), each with its own learning environment, users, curriculum, content, progress, games, and analytics.
+React + TypeScript
+        +
+Vercel
+        +
+Supabase
 
----
+There is no separate Python/FastAPI application backend.
 
-🎯 Vision
-
-TheTutor aims to transform learning from passive memorization into an interactive learning journey:
-
-Learn
-  ↓
-Practice
-  ↓
-Play
-  ↓
-Measure
-  ↓
-Understand
-  ↓
-Improve
-
-The platform combines structured curriculum content with educational games, learning analytics, mastery tracking, personalized recommendations, and parent-facing progress insights.
+Supabase provides the managed backend platform, while PostgreSQL is the authoritative source of truth.
 
 ---
 
-🧭 Core Architecture
+1. Project Status
 
-TheTutor is built as a multi-tenant educational SaaS.
+Current Phase: Architecture and foundation
+Implementation Status: Pre-production / implementation preparation
+Architecture Status: Defined
+Database Architecture: Defined
+Frontend Architecture: Defined
+Backend Architecture: Defined
 
-                    TheTutor Platform
+The project is currently being prepared for implementation from a clean architectural baseline.
+
+---
+
+2. Product Goals
+
+TheTutor is designed to provide:
+
+- Structured educational content.
+- Curriculum-based learning.
+- Interactive lessons.
+- Educational games.
+- Student progress tracking.
+- Learning analytics.
+- Mastery tracking.
+- Gamification.
+- Challenges.
+- Parent dashboards.
+- Student dashboards.
+- Multi-tenant educational environments.
+- Secure authentication and authorization.
+- Realtime features where appropriate.
+
+The platform is designed to support both learning experiences and administrative/parent visibility while maintaining strict tenant isolation.
+
+---
+
+3. Core Architecture
+
+The production architecture is:
+
+                         GitHub
                            │
-          ┌────────────────┼────────────────┐
-          │                │                │
-       Tenant A         Tenant B         Tenant C
-          │                │                │
-       Learning         Learning         Learning
-       Environment      Environment      Environment
-          │                │                │
-      Students         Students         Students
-      Curriculum       Curriculum       Curriculum
-      Games            Games            Games
-      Progress         Progress         Progress
-      Analytics        Analytics        Analytics
-
-A tenant may represent:
-
-- A school.
-- An educational center.
-- Another educational organization.
-
-Tenant isolation is a security boundary.
-
-PostgreSQL Row Level Security (RLS) is used to enforce database-level isolation.
+                           ▼
+                         Vercel
+                           │
+                           ▼
+                 React + TypeScript
+                           │
+                           ▼
+                    Supabase Client
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+   Supabase Auth      PostgreSQL        Edge Functions
+                           │                  │
+                    ┌──────┼──────┐           ▼
+                    │      │      │    External Services
+                    ▼      ▼      ▼
+                   RLS    RPC   Triggers
+                    │
+                    ▼
+             Authoritative State
+                    │
+             ┌──────┴──────┐
+             ▼             ▼
+         Realtime       Storage
 
 ---
 
-🏗️ Technology Stack
+4. Architecture Principles
+
+TheTutor follows these core principles:
+
+1. Supabase is the managed backend platform.
+2. PostgreSQL is the authoritative data source.
+3. RLS is the primary database authorization boundary.
+4. The browser is never trusted with authoritative state.
+5. Games are server/database authoritative.
+6. Tenant isolation is enforced at the database layer.
+7. Privileged secrets never reach the browser.
+8. Edge Functions are used only where server-side execution is required.
+9. The simplest Supabase capability should be preferred when it satisfies the requirement.
+10. Architecture should remain simple until real requirements justify additional infrastructure.
+
+---
+
+5. Technology Stack
 
 Layer| Technology
-Frontend| React + TypeScript
+Frontend| React
+Language| TypeScript
 Build Tool| Vite
-Styling| Tailwind CSS
 Routing| React Router
-Server State| TanStack Query
-Runtime Validation| Zod
-Backend| Python + FastAPI
-Validation| Pydantic
-HTTP| HTTPX
-Analytics| pandas + numpy
-Database| Supabase PostgreSQL
+Styling| Tailwind CSS
+Frontend Hosting| Vercel
+Backend Platform| Supabase
+Database| PostgreSQL
 Authentication| Supabase Auth
-Storage| Supabase Storage
+Authorization| PostgreSQL RLS
+Trusted Database Logic| PostgreSQL Functions / RPC
+Database Automation| PostgreSQL Triggers
+Analytics Read Models| PostgreSQL Views / Aggregations
 Realtime| Supabase Realtime
-Security| PostgreSQL RLS
-
-The stack may evolve, but architectural responsibilities remain governed by the project's architecture contracts.
-
----
-
-👥 Identity and Multi-Tenancy
-
-TheTutor separates global identity from tenant-specific educational identity.
-
-Global Authentication Identity
-              │
-              ▼
-       Tenant Membership
-              │
-              ▼
-   Tenant-Specific Profile
-              │
-              ▼
-       Learning Context
-
-A single authenticated user may belong to multiple tenants.
-
-A student's:
-
-- Grade
-- Curriculum
-- Progress
-- XP
-- Achievements
-- Games
-- Analytics
-- Learning history
-
-are associated with the appropriate tenant-specific learning context.
+File Storage| Supabase Storage
+Server-side Integrations| Supabase Edge Functions
+Scheduling| Supabase/database scheduling capabilities
 
 ---
 
-📚 Curriculum Architecture
+6. No Separate Application Backend
 
-The authoritative curriculum hierarchy is:
+The initial architecture does not contain:
 
-Tenant
-  ↓
-Curriculum
-  ↓
-Grade
-  ↓
-Term
-  ↓
-Subject
-  ↓
-Unit
-  ↓
-Lesson
+Python
+FastAPI
+Django
+Express
+Node.js application server
+Separate REST API server
+Separate backend database
 
-This allows different tenants to operate different curricula while preserving a consistent application architecture.
+The backend is provided by Supabase.
 
-The initial target is Egyptian primary education, Grades 1–6, including the Experimental Languages / language-school context.
+The application communicates with Supabase through the Supabase client and approved server-side capabilities.
 
 ---
 
-📖 Learning Experience
+7. Repository Architecture
 
-A lesson can contain multiple educational content types:
+The project documentation is organized around four primary architecture contracts:
 
-- Text.
-- Video.
-- Infographic.
-- Images.
-- Audio.
-- Interactive activities.
-- Learning exercises.
+DATABASE_SCHEMA_MASTER_PLAN.md
+        │
+        ▼
+PROJECT_ARCHITECTURE.md
+        │
+        ├───────────────┐
+        ▼               ▼
+FRONTEND_ARCHITECTURE.md
+                        │
+                        ▼
+BACKEND_ARCHITECTURE.md
+
+The responsibilities are:
+
+"DATABASE_SCHEMA_MASTER_PLAN.md"
+
+Defines:
+
+- Database structure.
+- Tables.
+- Relationships.
+- Constraints.
+- Tenant isolation.
+- RLS.
+- Database functions.
+- Analytics data.
+- Learning data.
+- Game data.
+- Security boundaries.
+
+"PROJECT_ARCHITECTURE.md"
+
+Defines the system-level architecture and how the major components interact.
+
+"FRONTEND_ARCHITECTURE.md"
+
+Defines:
+
+- React application architecture.
+- Routing.
+- UI structure.
+- Feature organization.
+- Supabase client usage.
+- Frontend state.
+- Games UI.
+- Analytics UI.
+- Parent/student experiences.
+
+"BACKEND_ARCHITECTURE.md"
+
+Defines:
+
+- Supabase backend responsibilities.
+- Auth.
+- PostgreSQL.
+- RLS.
+- RPC.
+- Realtime.
+- Storage.
+- Edge Functions.
+- Backend security boundaries.
+
+---
+
+8. Database
+
+PostgreSQL is the source of truth for persistent application state.
+
+The database stores and manages the platform's authoritative data, including:
+
+- Tenants.
+- Profiles.
+- Memberships.
+- Student identities.
+- Parent/student relationships.
+- Curriculum.
+- Lessons.
+- Educational content.
 - Questions.
-- Supporting educational assets.
-
-Content follows a controlled lifecycle:
-
-Draft
-  ↓
-Validation
-  ↓
-Review
-  ↓
-Approved
-  ↓
-Published
-  ↓
-Archived
-
-AI-generated content is treated as draft content until it passes the appropriate validation and review process.
-
----
-
-🎮 Educational Games
-
-Games are a core part of TheTutor.
-
-The platform is designed to support games at multiple scopes:
-
-Lesson Game
-     ↓
-Unit Game
-     ↓
-Subject Game
-     ↓
-Challenge Game
-     ↓
-Multiplayer Game
-
-Games are driven by configurable game definitions, question banks, difficulty levels, sessions, attempts, scoring, XP, and analytics.
-
-Initial difficulty levels:
-
-Easy
-Medium
-Hard
-
-The architecture is designed so additional game types can be introduced without redesigning the entire platform.
-
----
-
-🔐 Critical Learning Rule
-
-One of the most important platform invariants is:
-
-«A student must only be tested on learning material that the student has completed.»
-
-Question eligibility is determined by trusted backend/database logic.
-
-Student
-  ↓
-Completed Learning
-  ↓
-Eligible Questions
-  ↓
-Game Scope
-  ↓
-Difficulty
-  ↓
-Game Session
-
-The frontend cannot override this rule.
-
----
-
-🛡️ Server-Authoritative Learning
-
-The browser is not trusted to determine authoritative learning results.
-
-The backend controls:
-
-- Authorization.
-- Tenant validation.
-- Lesson completion.
-- Question eligibility.
-- Game session creation.
-- Question selection.
-- Answer validation.
-- Score calculation.
-- XP calculation.
-- Achievement evaluation.
-- Streak calculation.
+- Game sessions.
+- Learning progress.
+- Learning events.
+- XP.
+- Achievements.
+- Streaks.
 - Mastery.
 - Analytics.
 - Recommendations.
-- Content publication.
-- Administrative operations.
+- Challenges.
+- Notifications.
+- Other application state defined by the database contract.
 
-The database enforces the underlying security model through PostgreSQL RLS.
+The complete database design is defined in:
 
----
-
-📊 Progress, Mastery and Analytics
-
-TheTutor does not treat game scores as the complete definition of learning progress.
-
-The platform separates:
-
-Learning Progress
-      +
-Game Performance
-      +
-Question Performance
-      +
-Learning Events
-      ↓
-Analytics
-      ↓
-Mastery
-      ↓
-Recommendations
-
-Analytics may evaluate:
-
-- Lesson completion.
-- Accuracy.
-- Concept mastery.
-- Weak concepts.
-- Strong concepts.
-- Difficulty performance.
-- Learning trends.
-- XP.
-- Streaks.
-- Time-on-task where available.
-- Question-level performance.
-- Subject-level performance.
-
-Python analytics tooling may be used for advanced analysis and aggregation.
+"DATABASE_SCHEMA_MASTER_PLAN.md"
 
 ---
 
-🏆 Gamification
+9. Authentication
 
-The platform supports learning-focused gamification including:
+Authentication is handled by Supabase Auth.
 
-- XP.
-- Levels.
-- Achievements.
-- Streaks.
-- Leaderboards.
-- Challenge participation.
-- Game rewards.
+Basic flow:
 
-XP and rewards are server-authoritative.
+User
+  ↓
+Supabase Auth
+  ↓
+Authenticated Session
+  ↓
+React Application
+  ↓
+Supabase
 
-The client cannot directly assign itself XP, scores, achievements, or rewards.
-
----
-
-👨‍👩‍👧 Parent Experience
-
-Parents receive a dedicated experience for monitoring explicitly linked children.
-
-The parent experience is designed around meaningful educational information rather than raw data.
-
-Parents can eventually see:
-
-- Lesson completion.
-- Subject progress.
-- Performance trends.
-- Mastery.
-- Strengths.
-- Areas requiring improvement.
-- Recent learning activity.
-- Recommendations.
-- Achievements.
-- Relevant notifications.
-
-Parent access is restricted to explicitly authorized children.
+The application does not implement a custom authentication server.
 
 ---
 
-⚔️ Challenges and Multiplayer
+10. Authorization
 
-TheTutor supports configurable educational challenges.
+Authorization is enforced primarily through PostgreSQL RLS.
 
-Challenges can define:
+The frontend may hide or show UI based on role and permissions for usability.
 
-- Schedule.
-- Time zone.
-- Grade.
-- Subject.
-- Eligibility.
-- Questions.
-- Scoring.
-- Ranking.
-- Recurrence.
+However:
 
-The platform also supports multiplayer educational games using Supabase Realtime for synchronization and communication.
+«Frontend authorization is not a security boundary.»
 
-Realtime is a delivery/synchronization mechanism — it is not the authorization boundary.
+The database independently verifies access.
 
 ---
 
-💬 Educational Social Features
+11. Multi-Tenancy
 
-The platform includes educational social capabilities such as:
-
-- Friend relationships.
-- Educational chat.
-- Game invitations.
-- Challenge participation.
-- Multiplayer interaction.
-
-Social functionality is tenant-scoped and designed around the educational purpose of the platform.
-
-Future moderation and safety controls are part of the architecture's extensibility.
-
----
-
-🤖 AI-Assisted Content
-
-AI is used as a controlled content-production capability.
-
-Potential AI-generated assets include:
-
-- Lessons.
-- Explanations.
-- Questions.
-- Activities.
-- Game content.
-- Supporting metadata.
-
-The intended pipeline is:
-
-Generation Request
-       ↓
-AI Generation
-       ↓
-Draft
-       ↓
-Validation
-       ↓
-Human / System Review
-       ↓
-Approval
-       ↓
-Publication
-
-AI output is never assumed to be production-ready simply because it was generated successfully.
-
----
-
-🏢 SaaS Model
-
-TheTutor is designed as a SaaS platform.
-
-Platform-level administration may manage:
-
-- Tenants.
-- Plans.
-- Subscriptions.
-- Tenant status.
-- Platform configuration.
-- Controlled support operations.
-
-Tenant administrators manage their own educational environment according to their permissions.
-
-A tenant administrator must never gain access to another tenant's data.
-
----
-
-🔒 Security Model
-
-Security is built into the architecture rather than added later.
-
-Core security principles include:
-
-Tenant Isolation
-
-PostgreSQL RLS protects tenant-scoped data.
-
-Authentication
-
-Supabase Auth provides global authentication identity.
-
-Authorization
-
-Authorization considers:
-
-Authentication
-      ↓
-Tenant Membership
-      ↓
-Role
-      ↓
-Resource Ownership
-      ↓
-Business Rules
-
-Student Data
-
-Student learning data is tenant-scoped.
-
-Parent Data
-
-Parents can access only explicitly linked children.
-
-Game Security
-
-The client cannot authoritatively determine:
-
-Correctness
-Score
-XP
-Rewards
-Eligibility
-Game Results
-
-Question Security
-
-Correct answers must never be exposed to normal student-facing APIs before answer evaluation.
-
----
-
-🧱 Project Architecture
-
-The project is organized around clear frontend/backend/domain boundaries.
+TheTutor is a multi-tenant SaaS platform.
 
 Conceptually:
 
+Platform
+ ├── Tenant A
+ │    ├── Users
+ │    ├── Students
+ │    ├── Curriculum
+ │    └── Learning Data
+ │
+ ├── Tenant B
+ │    ├── Users
+ │    ├── Students
+ │    ├── Curriculum
+ │    └── Learning Data
+ │
+ └── Tenant C
+      ├── Users
+      ├── Students
+      ├── Curriculum
+      └── Learning Data
+
+Tenant isolation is enforced at the database layer.
+
+A client-supplied tenant ID does not grant access to that tenant.
+
+---
+
+12. Learning Architecture
+
+The learning hierarchy is based on the curriculum model defined by the database contract.
+
+Conceptually:
+
+Curriculum
+    ↓
+Grade
+    ↓
+Term
+    ↓
+Subject
+    ↓
+Unit
+    ↓
+Lesson
+
+Learning progress is stored and/or derived from authoritative database state.
+
+---
+
+13. Educational Content
+
+The frontend uses a data-driven content architecture.
+
+Conceptually:
+
+Content Data
+     ↓
+Content Type
+     ↓
+Renderer
+     ↓
+React Component
+
+This allows educational content to be represented as structured data while keeping rendering reusable.
+
+---
+
+14. Educational Games
+
+Games are part of the core learning architecture.
+
+The game UI runs in React.
+
+Authoritative game operations run through Supabase.
+
+Basic flow:
+
+Student
+   ↓
+Game UI
+   ↓
+start_game()
+   ↓
+Game Session
+   ↓
+Question
+   ↓
+Student Answer
+   ↓
+submit_game_answer()
+   ↓
+Database Evaluation
+   ↓
+Result
+   ↓
+XP / Progress / Learning Event
+
+The browser must not be trusted to determine:
+
+- Correct answers.
+- Final score.
+- XP.
+- Completion.
+- Eligibility.
+- Other authoritative game state.
+
+---
+
+15. Learning Analytics
+
+Analytics are based on authoritative learning data.
+
+Conceptually:
+
+Learning Events
+       ↓
+PostgreSQL
+       ↓
+Aggregation / Read Models
+       ↓
+Analytics
+       ↓
+Frontend Dashboards
+
+The platform supports analytics for appropriate user experiences, including student and parent dashboards.
+
+The frontend should not need to download large raw datasets merely to calculate core analytics.
+
+---
+
+16. Parent Experience
+
+Parents may access authorized student information.
+
+The authorization model is:
+
+Parent
+  ↓
+Authorized Relationship
+  ↓
+Student
+  ↓
+Learning Data
+  ↓
+Analytics
+
+Changing a URL, query parameter, student ID, or tenant ID must not bypass authorization.
+
+---
+
+17. Student Experience
+
+Students may access learning experiences appropriate to their identity and authorization.
+
+Examples include:
+
+- Lessons.
+- Activities.
+- Games.
+- Progress.
+- Mastery.
+- XP.
+- Achievements.
+- Streaks.
+- Challenges.
+- Recommendations.
+
+---
+
+18. Realtime
+
+Supabase Realtime is used only where live synchronization provides meaningful product value.
+
+Potential use cases include:
+
+- Multiplayer games.
+- Chat.
+- Presence.
+- Notifications.
+- Challenge updates.
+- Live activity.
+
+PostgreSQL remains the source of truth.
+
+Realtime is a synchronization mechanism, not the authoritative datastore.
+
+---
+
+19. Storage
+
+Supabase Storage handles application assets such as:
+
+- Lesson images.
+- Educational media.
+- Infographics.
+- Avatars.
+- Attachments.
+- Other approved educational assets.
+
+Storage access follows the application's authorization model.
+
+---
+
+20. Edge Functions
+
+Supabase Edge Functions are used for operations that require server-side execution.
+
+Examples:
+
+- AI provider calls.
+- Payment integrations.
+- External APIs.
+- Webhooks.
+- Email providers.
+- Secret-bearing operations.
+- Privileged external processing.
+
+Basic flow:
+
 Frontend
-   │
-   │ HTTPS / JSON
-   ▼
-FastAPI
-   │
-   ▼
-Domain Services
-   │
-   ▼
-Repositories / Integrations
-   │
-   ▼
-Supabase PostgreSQL
-   │
-   ▼
-RLS
+   ↓
+Edge Function
+   ↓
+External Service
+   ↓
+Controlled Response
+   ↓
+Frontend
 
-The frontend is responsible for presentation and interaction.
-
-The backend is responsible for application business logic.
-
-PostgreSQL is the system of record and security boundary for tenant data.
+Private credentials remain server-side.
 
 ---
 
-📂 Target Repository Structure
+21. Secrets
 
-The architecture is evolving toward:
+The browser must never contain:
 
-thetutor/
-│
-├── frontend/
-│   ├── src/
-│   │   ├── app/
-│   │   ├── components/
-│   │   ├── features/
-│   │   ├── hooks/
-│   │   ├── lib/
-│   │   ├── pages/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── types/
-│   │   └── styles/
-│   ├── tests/
-│   └── package.json
-│
-├── backend/
-│   ├── app/
-│   │   ├── api/
-│   │   ├── auth/
-│   │   ├── core/
-│   │   ├── db/
-│   │   ├── domains/
-│   │   ├── integrations/
-│   │   ├── jobs/
-│   │   └── schemas/
-│   ├── tests/
-│   └── requirements.txt
-│
-├── content_injector/
-│
-├── DATABASE_SCHEMA_MASTER_PLAN.md
-├── PROJECT_ARCHITECTURE.md
-├── FRONTEND_ARCHITECTURE.md
-├── BACKEND_ARCHITECTURE.md
-├── API_CONTRACT.md
-└── README.md
+Supabase Service Role Key
+Database Password
+AI API Keys
+Payment Secrets
+Webhook Secrets
+Private Third-party Credentials
 
-The exact implementation structure may evolve without changing the underlying architectural responsibilities.
+Only public client configuration required by the frontend may be exposed.
 
 ---
 
-📐 Architecture Documents
+22. Type Safety
 
-The project uses dedicated architecture contracts.
+The frontend database types should be generated from the actual Supabase schema.
 
-Document| Responsibility
-"DATABASE_SCHEMA_MASTER_PLAN.md"| Database model, relationships, constraints, RLS and persistence contract
-"PROJECT_ARCHITECTURE.md"| Overall system architecture and responsibility boundaries
-"FRONTEND_ARCHITECTURE.md"| React/frontend architecture
-"BACKEND_ARCHITECTURE.md"| FastAPI/backend architecture
-"API_CONTRACT.md"| Frontend ↔ Backend API communication contract
-"README.md"| Project introduction, orientation and development entry point
+Conceptually:
 
-The authority relationship is:
+PostgreSQL
+    ↓
+Supabase Type Generation
+    ↓
+TypeScript Database Types
+    ↓
+React Application
 
-DATABASE_SCHEMA_MASTER_PLAN.md
-              ↓
-PROJECT_ARCHITECTURE.md
-              ↓
- ┌────────────┴────────────┐
- ↓                         ↓
-FRONTEND              BACKEND
-ARCHITECTURE           ARCHITECTURE
- └────────────┬────────────┘
-              ↓
-       API_CONTRACT.md
-
-Lower-level implementation documents must not contradict higher-level contracts.
+The frontend should not manually recreate the database schema when generated types can be used.
 
 ---
 
-🛠️ Development Principles
+23. Frontend ↔ Backend Communication
 
-Development should follow a vertical-slice approach.
+The primary communication path is:
 
-The first critical learning slice is:
+React
+  ↓
+Supabase Client
+  ↓
+Supabase
+
+Depending on the operation, the frontend may use:
+
+Supabase Auth
+Supabase Database Queries
+Supabase RPC
+Supabase Realtime
+Supabase Storage
+Supabase Edge Functions
+
+There is no mandatory custom REST API layer.
+
+---
+
+24. Security Model
+
+Security is based on:
+
+Supabase Auth
+       +
+PostgreSQL RLS
+       +
+Database Authorization Functions
+       +
+Trusted RPC
+       +
+Server-side Edge Functions
+
+Important principles:
+
+- Never trust the browser.
+- Never trust client-supplied tenant IDs.
+- Protect tenant boundaries.
+- Protect parent/student relationships.
+- Protect game answer keys.
+- Keep authoritative calculations server-side.
+- Keep private credentials server-side.
+
+---
+
+25. Performance
+
+The system should prioritize:
+
+- Efficient PostgreSQL queries.
+- Appropriate indexes.
+- Efficient RLS policies.
+- Pagination.
+- Selective data fetching.
+- Code splitting.
+- Lazy loading.
+- Optimized media.
+- Efficient Realtime subscriptions.
+- Read-optimized analytics where needed.
+
+Infrastructure should remain proportional to actual requirements.
+
+---
+
+26. Deployment
+
+Production deployment follows:
+
+GitHub
+   ↓
+Vercel
+   ↓
+React + TypeScript
+   ↓
+Supabase
+
+Vercel hosts and delivers the frontend.
+
+Supabase provides the managed backend capabilities.
+
+---
+
+27. Development
+
+The development architecture mirrors production:
+
+React + TypeScript
+        ↓
+Supabase
+
+No local Python/FastAPI application server is required.
+
+---
+
+28. Testing
+
+Testing should cover:
 
 Authentication
-      ↓
-Tenant Membership
-      ↓
-Student
-      ↓
-Curriculum
-      ↓
-Lesson
-      ↓
-Lesson Completion
-      ↓
-Progress
-      ↓
-Question Eligibility
-      ↓
-Game Session
-      ↓
-Answer Submission
-      ↓
-Score
-      ↓
-XP
-      ↓
-Learning Events
-      ↓
+
+- Sign in.
+- Sign out.
+- Session recovery.
+- Expired sessions.
+
+Authorization
+
+- Tenant isolation.
+- Role restrictions.
+- Parent/student access.
+- Unauthorized resource access.
+
+Learning
+
+- Curriculum.
+- Lessons.
+- Progress.
+- Completion.
+
+Games
+
+- Game creation.
+- Question retrieval.
+- Answer submission.
+- Evaluation.
+- Completion.
+- Recovery.
+
 Analytics
 
-After the core learning loop is stable, the platform can expand into:
-
-Parent Experience
-Challenges
-Notifications
-Social
-Multiplayer
-AI Content
-Billing
-Advanced Analytics
+- Progress.
+- Mastery.
+- Performance.
+- Parent visibility.
 
 ---
 
-🧪 Quality and Testing
+29. Architecture Change Policy
 
-The platform requires testing at multiple levels.
+Architectural changes must be documented before implementation.
 
-Unit Tests
-    ↓
-Integration Tests
-    ↓
-API Tests
-    ↓
-Security Tests
-    ↓
-End-to-End Tests
+Changes affecting:
 
-Critical security tests include:
+- Authentication.
+- Authorization.
+- Tenant isolation.
+- Database authority.
+- Game authority.
+- Backend platform.
+- Frontend/backend boundaries.
+- External integrations.
 
-- Cross-tenant access attempts.
-- Role escalation.
-- Unauthorized student access.
-- Unauthorized parent-child access.
-- Question-answer leakage.
-- Game manipulation.
-- XP manipulation.
-- Score manipulation.
-- Unauthorized administrative operations.
+must update the appropriate architecture documentation.
 
 ---
 
-🚦 Development Status
+30. Simplicity Rule
 
-The project is currently in the architecture and foundation phase.
+TheTutor intentionally avoids unnecessary backend infrastructure.
 
-The architecture contracts are being established before rebuilding the application implementation around them.
+Preferred backend decision order:
 
-The intended sequence is:
+RLS
+ ↓
+Direct PostgreSQL Operation
+ ↓
+Database Function / RPC
+ ↓
+Trigger / View where appropriate
+ ↓
+Edge Function
+ ↓
+External Service
 
-Database Contract
-       ↓
-Project Architecture
-       ↓
-Frontend Architecture
-       ↓
-Backend Architecture
-       ↓
-API Contract
-       ↓
-Implementation
-       ↓
-Testing
-       ↓
-Deployment
-
-Existing/legacy implementation should be audited before being replaced or removed.
+A new infrastructure component should only be introduced when the existing architecture cannot reasonably satisfy the requirement.
 
 ---
 
-📋 Current Architectural Priorities
+31. Architecture Boundaries
 
-1. Finalize the database contract.
-2. Finalize system architecture.
-3. Finalize frontend architecture.
-4. Finalize backend architecture.
-5. Define the API contract.
-6. Rebuild the backend around the approved architecture.
-7. Rebuild the frontend around the approved architecture.
-8. Implement the first complete learning vertical slice.
-9. Implement game/question security.
-10. Implement progress and analytics.
-11. Expand parent, challenge, social, multiplayer and AI capabilities.
+Frontend Owns
 
----
+Presentation
+Interaction
+Navigation
+UI State
+Client Validation
+Accessibility
+Responsive Design
+Realtime Presentation
 
-🚀 Long-Term Platform Direction
+Supabase Auth Owns
 
-TheTutor is designed to evolve beyond a basic curriculum website into an adaptive educational platform.
+Identity
+Authentication
+Sessions
+Tokens
 
-The long-term architecture supports:
+PostgreSQL Owns
 
-Curriculum
-    +
-Interactive Content
-    +
-Educational Games
-    +
-Learning Events
-    +
-Analytics
-    +
-Mastery
-    +
-Recommendations
-    +
-Parent Insights
-    +
-Social Learning
-    +
-AI-Assisted Content
+Persistent State
+Relationships
+RLS
+Authoritative Learning State
+Game State
+Analytics Facts
+Derived State
 
-The goal is not simply to track whether a student opened a lesson.
+Database Functions Own
 
-The goal is to understand:
+Trusted Transactions
+Complex Database Operations
+Game Operations
+Authorization-sensitive Operations
 
-«What did the student learn, how well did they learn it, where are the gaps, and what should happen next?»
+Realtime Owns
 
----
+Live Synchronization
+Presence
+Live Events
 
-📄 License
+Storage Owns
 
-License and distribution terms will be defined as the project approaches public release.
+Application Assets
+Educational Media
+User Assets
 
----
+Edge Functions Own
 
-🔗 Project
+Secrets
+External Integrations
+AI
+Webhooks
+Privileged Server-side Processing
 
-TheTutor
+Vercel Owns
 
-Interactive educational SaaS platform for Egyptian primary education.
-
-Primary target: Grades 1–6
-
-Architecture: Multi-Tenant Educational SaaS
-
-Frontend: React + TypeScript
-
-Backend: Python + FastAPI
-
-Database: Supabase PostgreSQL
-
-Security: PostgreSQL RLS
+Frontend Hosting
+Builds
+Deployments
+Web Delivery
 
 ---
 
-TheTutor — Learn. Practice. Play. Improve.
+32. Explicitly Excluded from Initial Architecture
+
+The following are not part of the initial TheTutor architecture:
+
+Python Backend
+FastAPI
+Django
+Node.js Application Server
+Express
+Separate REST API
+Separate Application Database
+Microservices
+Kubernetes
+
+They should not be introduced without an explicit future architecture decision.
+
+---
+
+33. Documentation References
+
+The main architecture documents are:
+
+README.md
+PROJECT_ARCHITECTURE.md
+FRONTEND_ARCHITECTURE.md
+BACKEND_ARCHITECTURE.md
+DATABASE_SCHEMA_MASTER_PLAN.md
+
+These documents must remain consistent.
+
+When a technical decision changes the architecture, the relevant documentation must be updated before implementation continues.
+
+---
+
+34. Final Architecture
+
+TheTutor's initial production architecture is:
+
+                     THE TUTOR
+                         │
+                         ▼
+                React + TypeScript
+                         │
+                         ▼
+                       Vercel
+                         │
+                         ▼
+                     Supabase
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+        ▼                ▼                ▼
+       Auth         PostgreSQL       Edge Functions
+                         │                │
+                   ┌─────┼─────┐          ▼
+                   ▼     ▼     ▼     External Services
+                  RLS   RPC  Triggers
+                         │
+                ┌────────┴────────┐
+                ▼                 ▼
+            Realtime           Storage
+
+The architectural model is intentionally simple:
+
+React + TypeScript for the application experience.
+
+Vercel for frontend deployment.
+
+Supabase for the managed backend platform.
+
+PostgreSQL for authoritative application state.
+
+RLS for database-level authorization and tenant isolation.
+
+RPC/Database Functions for trusted transactional operations.
+
+Realtime for live synchronization.
+
+Storage for assets.
+
+Edge Functions for secrets and external integrations.
+
+There is no separate Python/FastAPI backend in the initial architecture.
