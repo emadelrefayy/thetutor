@@ -258,13 +258,6 @@ async function getCurrentUserId(): Promise<string> {
   return user.id;
 }
 
-/**
- * Returns every tenant that the current authenticated identity
- * is legitimately connected to.
- *
- * A user can have multiple tenant contexts.
- * We never collapse those contexts into one student identity.
- */
 async function getAccessibleTenantIds(): Promise<string[]> {
   const userId = await getCurrentUserId();
 
@@ -311,21 +304,19 @@ async function getAccessibleTenantIds(): Promise<string[]> {
 }
 
 /**
- * Curriculum queries must execute inside exactly one tenant context.
+ * Every curriculum operation is tenant-scoped.
  *
- * This is intentional.
- *
- * If a user belongs to multiple tenants, we do NOT merge curriculum
- * records from those tenants merely because numeric IDs or names happen
- * to match. The caller must provide the tenant explicitly.
+ * A numeric curriculum ID is never treated as globally sufficient.
+ * When a user has access to multiple tenants, the caller must provide
+ * the tenant explicitly.
  */
 async function resolveTenantId(
   tenantId?: string,
 ): Promise<string> {
-  if (tenantId) {
-    const accessibleTenantIds =
-      await getAccessibleTenantIds();
+  const accessibleTenantIds =
+    await getAccessibleTenantIds();
 
+  if (tenantId) {
     if (!accessibleTenantIds.includes(tenantId)) {
       throw new Error(
         'You are not authorized to access this tenant.',
@@ -334,9 +325,6 @@ async function resolveTenantId(
 
     return tenantId;
   }
-
-  const accessibleTenantIds =
-    await getAccessibleTenantIds();
 
   if (accessibleTenantIds.length === 0) {
     throw new Error(
@@ -423,7 +411,8 @@ export async function getCurrentParentStudents(): Promise<
     .eq('parent_profile_id', userId)
     .order('created_at');
 
-  const links = (await throwIfError(linksResult)) ?? [];
+  const links =
+    (await throwIfError(linksResult)) ?? [];
 
   if (links.length === 0) {
     return [];
@@ -500,9 +489,10 @@ export async function getCurrentUserContext(): Promise<
   };
 }
 
-/**
- * Grades
- */
+/* -------------------------------------------------------------------------- */
+/* Grades                                                                     */
+/* -------------------------------------------------------------------------- */
+
 export async function getGrades(
   tenantId?: string,
 ): Promise<Grade[]> {
@@ -521,13 +511,29 @@ export async function getGrades(
   return (await throwIfError(result)) ?? [];
 }
 
-/**
- * Terms
- *
- * The parent grade is resolved inside the same tenant first.
- * This prevents a grade ID from being reused across tenants
- * to accidentally expose another tenant's terms.
- */
+export async function getGradeById(
+  gradeId: number,
+  tenantId?: string,
+): Promise<Grade | null> {
+  const resolvedTenantId =
+    await resolveTenantId(tenantId);
+
+  const result = await supabase
+    .from('grades')
+    .select(
+      'id, title, code, level_code, tenant_id, created_at',
+    )
+    .eq('id', gradeId)
+    .eq('tenant_id', resolvedTenantId)
+    .maybeSingle();
+
+  return throwIfError(result);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Terms                                                                      */
+/* -------------------------------------------------------------------------- */
+
 export async function getTermsByGrade(
   gradeId: number,
   tenantId?: string,
@@ -542,7 +548,8 @@ export async function getTermsByGrade(
     .eq('tenant_id', resolvedTenantId)
     .maybeSingle();
 
-  const grade = await throwIfError(gradeResult);
+  const grade =
+    await throwIfError(gradeResult);
 
   if (!grade) {
     throw new Error(
@@ -562,9 +569,29 @@ export async function getTermsByGrade(
   return (await throwIfError(result)) ?? [];
 }
 
-/**
- * Subjects
- */
+export async function getTermById(
+  termId: number,
+  tenantId?: string,
+): Promise<Term | null> {
+  const resolvedTenantId =
+    await resolveTenantId(tenantId);
+
+  const result = await supabase
+    .from('terms')
+    .select(
+      'id, title, code, grade_id, tenant_id, created_at',
+    )
+    .eq('id', termId)
+    .eq('tenant_id', resolvedTenantId)
+    .maybeSingle();
+
+  return throwIfError(result);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Subjects                                                                   */
+/* -------------------------------------------------------------------------- */
+
 export async function getSubjectsByTerm(
   termId: number,
   tenantId?: string,
@@ -579,7 +606,8 @@ export async function getSubjectsByTerm(
     .eq('tenant_id', resolvedTenantId)
     .maybeSingle();
 
-  const term = await throwIfError(termResult);
+  const term =
+    await throwIfError(termResult);
 
   if (!term) {
     throw new Error(
@@ -600,9 +628,30 @@ export async function getSubjectsByTerm(
   return (await throwIfError(result)) ?? [];
 }
 
-/**
- * Units
- */
+export async function getSubjectById(
+  subjectId: number,
+  tenantId?: string,
+): Promise<Subject | null> {
+  const resolvedTenantId =
+    await resolveTenantId(tenantId);
+
+  const result = await supabase
+    .from('subjects')
+    .select(
+      'id, title, code, term_id, tenant_id, icon_name, color_theme, created_at, deleted_at',
+    )
+    .eq('id', subjectId)
+    .eq('tenant_id', resolvedTenantId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  return throwIfError(result);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Units                                                                      */
+/* -------------------------------------------------------------------------- */
+
 export async function getUnitsBySubject(
   subjectId: number,
   tenantId?: string,
@@ -641,9 +690,30 @@ export async function getUnitsBySubject(
   return (await throwIfError(result)) ?? [];
 }
 
-/**
- * Lessons
- */
+export async function getUnitById(
+  unitId: number,
+  tenantId?: string,
+): Promise<Unit | null> {
+  const resolvedTenantId =
+    await resolveTenantId(tenantId);
+
+  const result = await supabase
+    .from('units')
+    .select(
+      'id, title, unit_number, subject_id, tenant_id, description, created_at, deleted_at',
+    )
+    .eq('id', unitId)
+    .eq('tenant_id', resolvedTenantId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  return throwIfError(result);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Lessons                                                                    */
+/* -------------------------------------------------------------------------- */
+
 export async function getLessonsByUnit(
   unitId: number,
   tenantId?: string,
@@ -659,7 +729,8 @@ export async function getLessonsByUnit(
     .is('deleted_at', null)
     .maybeSingle();
 
-  const unit = await throwIfError(unitResult);
+  const unit =
+    await throwIfError(unitResult);
 
   if (!unit) {
     throw new Error(
@@ -681,9 +752,6 @@ export async function getLessonsByUnit(
   return (await throwIfError(result)) ?? [];
 }
 
-/**
- * Single lesson
- */
 export async function getLessonById(
   lessonId: number,
   tenantId?: string,
@@ -704,12 +772,10 @@ export async function getLessonById(
   return throwIfError(result);
 }
 
-/**
- * Lesson assets do not have their own tenant_id.
- *
- * Therefore the lesson is resolved first and its tenant_id becomes
- * the security boundary for the child records.
- */
+/* -------------------------------------------------------------------------- */
+/* Lesson assets                                                              */
+/* -------------------------------------------------------------------------- */
+
 export async function getLessonAssets(
   lessonId: number,
   tenantId?: string,
@@ -719,15 +785,14 @@ export async function getLessonAssets(
 
   const lessonResult = await supabase
     .from('lessons')
-    .select('id, tenant_id')
+    .select('id')
     .eq('id', lessonId)
     .eq('tenant_id', resolvedTenantId)
     .is('deleted_at', null)
     .maybeSingle();
 
-  const lesson = await throwIfError(
-    lessonResult,
-  );
+  const lesson =
+    await throwIfError(lessonResult);
 
   if (!lesson) {
     throw new Error(
@@ -748,9 +813,10 @@ export async function getLessonAssets(
   return (await throwIfError(result)) ?? [];
 }
 
-/**
- * Lesson content blocks use the same parent-lesson tenant boundary.
- */
+/* -------------------------------------------------------------------------- */
+/* Lesson content blocks                                                      */
+/* -------------------------------------------------------------------------- */
+
 export async function getLessonContentBlocks(
   lessonId: number,
   tenantId?: string,
@@ -760,15 +826,14 @@ export async function getLessonContentBlocks(
 
   const lessonResult = await supabase
     .from('lessons')
-    .select('id, tenant_id')
+    .select('id')
     .eq('id', lessonId)
     .eq('tenant_id', resolvedTenantId)
     .is('deleted_at', null)
     .maybeSingle();
 
-  const lesson = await throwIfError(
-    lessonResult,
-  );
+  const lesson =
+    await throwIfError(lessonResult);
 
   if (!lesson) {
     throw new Error(
@@ -789,21 +854,20 @@ export async function getLessonContentBlocks(
   return (await throwIfError(result)) ?? [];
 }
 
-/**
- * Resolve a student persona inside one tenant.
- *
- * The global auth profile ID is not enough.
- * The actual student identity is:
- *
- * tenant_id + profile_id
- */
+/* -------------------------------------------------------------------------- */
+/* Student identity and progress                                              */
+/* -------------------------------------------------------------------------- */
+
 async function resolveStudentProfile(
   tenantId: string,
   studentProfileId?: string,
 ): Promise<TenantStudentProfile> {
+  const currentStudents =
+    await getCurrentStudentProfiles();
+
   const profileId =
     studentProfileId ??
-    (await getCurrentStudentProfiles())
+    currentStudents
       .filter(
         (student) =>
           student.tenant_id === tenantId,
@@ -840,11 +904,6 @@ async function resolveStudentProfile(
   return student;
 }
 
-/**
- * Lesson progress is tenant-scoped by the composite relationship:
- *
- * tenant_id + student_profile_id
- */
 export async function getLessonProgress(
   lessonId: number,
   studentProfileId?: string,
@@ -855,15 +914,14 @@ export async function getLessonProgress(
 
   const lessonResult = await supabase
     .from('lessons')
-    .select('id, tenant_id')
+    .select('id')
     .eq('id', lessonId)
     .eq('tenant_id', resolvedTenantId)
     .is('deleted_at', null)
     .maybeSingle();
 
-  const lesson = await throwIfError(
-    lessonResult,
-  );
+  const lesson =
+    await throwIfError(lessonResult);
 
   if (!lesson) {
     throw new Error(
@@ -893,12 +951,13 @@ export async function getLessonProgress(
   return throwIfError(result);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Games                                                                      */
+/* -------------------------------------------------------------------------- */
+
 const GAME_DEFINITION_SELECT =
   'id, template_id, scope_type, lesson_id, unit_id, subject_id, course_id, challenge_id, title, settings, is_active, tenant_id, created_at';
 
-/**
- * Lesson-level game
- */
 export async function getLessonGame(
   lessonId: number,
   tenantId?: string,
@@ -914,9 +973,8 @@ export async function getLessonGame(
     .is('deleted_at', null)
     .maybeSingle();
 
-  const lesson = await throwIfError(
-    lessonResult,
-  );
+  const lesson =
+    await throwIfError(lessonResult);
 
   if (!lesson) {
     throw new Error(
@@ -936,9 +994,6 @@ export async function getLessonGame(
   return throwIfError(result);
 }
 
-/**
- * Unit-level game
- */
 export async function getUnitGame(
   unitId: number,
   tenantId?: string,
@@ -954,9 +1009,8 @@ export async function getUnitGame(
     .is('deleted_at', null)
     .maybeSingle();
 
-  const unit = await throwIfError(
-    unitResult,
-  );
+  const unit =
+    await throwIfError(unitResult);
 
   if (!unit) {
     throw new Error(
@@ -976,9 +1030,6 @@ export async function getUnitGame(
   return throwIfError(result);
 }
 
-/**
- * Subject-level game
- */
 export async function getSubjectGame(
   subjectId: number,
   tenantId?: string,
