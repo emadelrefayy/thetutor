@@ -331,12 +331,20 @@ export async function getCurrentParentStudents(): Promise<
   }
 
   /*
-   * tenant_parent_students.student_profile_id references
-   * profiles.id, not tenant_student_profiles.id.
+   * student_profile_id in tenant_parent_students refers to
+   * profiles.id. The actual tenant-scoped student persona is
+   * identified by tenant_id + profile_id.
    */
+
   const studentProfileIds = [
     ...new Set(
       links.map((link) => link.student_profile_id),
+    ),
+  ];
+
+  const tenantIds = [
+    ...new Set(
+      links.map((link) => link.tenant_id),
     ),
   ];
 
@@ -346,23 +354,37 @@ export async function getCurrentParentStudents(): Promise<
       'id, tenant_id, profile_id, student_code, display_name, grade_id, date_of_birth, avatar_url, xp, level, is_active, deleted_at, created_at, updated_at',
     )
     .in('profile_id', studentProfileIds)
+    .in('tenant_id', tenantIds)
     .eq('is_active', true)
     .is('deleted_at', null);
 
   const students =
     (await throwIfError(studentsResult)) ?? [];
 
-  const studentsByProfileId = new Map(
-    students.map((student) => [
-      student.profile_id,
+  /*
+   * IMPORTANT:
+   * profile_id alone is not sufficient because the same global
+   * profile may have a tenant_student_profiles row in multiple
+   * tenants.
+   */
+  const studentsByTenantAndProfile = new Map<
+    string,
+    TenantStudentProfile
+  >();
+
+  for (const student of students) {
+    studentsByTenantAndProfile.set(
+      `${student.tenant_id}:${student.profile_id}`,
       student,
-    ]),
-  );
+    );
+  }
 
   return links.map((link) => ({
     ...link,
     student:
-      studentsByProfileId.get(link.student_profile_id) ?? null,
+      studentsByTenantAndProfile.get(
+        `${link.tenant_id}:${link.student_profile_id}`,
+      ) ?? null,
   }));
 }
 
@@ -511,10 +533,14 @@ export async function getLessonProgress(
   studentProfileId?: string,
 ): Promise<LessonProgress | null> {
   /*
-   * lesson_progress.student_profile_id references the
-   * student's profile identity (profiles.id), not the
-   * tenant_student_profiles.id persona identifier.
+   * lesson_progress.student_profile_id references the global
+   * profile identity (profiles.id).
+   *
+   * The tenant scope must be resolved separately because the
+   * same profile may have a tenant_student_profiles row in
+   * more than one tenant.
    */
+
   const resolvedStudentProfileId =
     studentProfileId ??
     (await getCurrentStudentProfiles()).at(0)?.profile_id;
@@ -523,16 +549,45 @@ export async function getLessonProgress(
     return null;
   }
 
-  const studentProfileResult = await supabase
-    .from('tenant_student_profiles')
-    .select('profile_id, tenant_id')
-    .eq('profile_id', resolvedStudentProfileId)
+  const currentStudentProfiles =
+    await getCurrentStudentProfiles();
+
+  const matchingProfiles =
+    currentStudentProfiles.filter(
+      (student) =>
+        student.profile_id ===
+        resolvedStudentProfileId,
+    );
+
+  if (matchingProfiles.length === 0) {
+    return null;
+  }
+
+  /*
+   * A lesson belongs to one tenant. Resolve its tenant first,
+   * then find the matching student persona inside that tenant.
+   */
+  const lessonResult = await supabase
+    .from('lessons')
+    .select('id, tenant_id')
+    .eq('id', lessonId)
+    .is('deleted_at', null)
     .maybeSingle();
 
-  const studentProfile =
-    await throwIfError(studentProfileResult);
+  const lesson =
+    await throwIfError(lessonResult);
 
-  if (!studentProfile) {
+  if (!lesson) {
+    return null;
+  }
+
+  const matchingStudent =
+    matchingProfiles.find(
+      (student) =>
+        student.tenant_id === lesson.tenant_id,
+    );
+
+  if (!matchingStudent) {
     return null;
   }
 
@@ -545,7 +600,7 @@ export async function getLessonProgress(
       'student_profile_id',
       resolvedStudentProfileId,
     )
-    .eq('tenant_id', studentProfile.tenant_id)
+    .eq('tenant_id', matchingStudent.tenant_id)
     .eq('lesson_id', lessonId)
     .maybeSingle();
 
