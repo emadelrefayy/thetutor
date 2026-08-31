@@ -1,1377 +1,1060 @@
-TheTutor — Application Architecture
+TheTutor — Project Architecture
 
-1. Purpose
+1. Architecture Status
 
-TheTutor is a multi-tenant educational SaaS platform for Egyptian primary-school students in the Experimental Languages curriculum.
+This document defines the current target architecture for TheTutor.
 
-The platform serves four primary authenticated user experiences:
+The architecture is intentionally organized from platform-level concerns down to curriculum content and interactive learning.
 
-1. Platform Super Admin
-2. Tenant Admin
-3. Parent
-4. Student
+The primary hierarchy is:
 
-The public website contains a marketing landing page and authentication entry point.
+Platform
+└── Tenants
+    └── Users
+        ├── Super Admin
+        ├── Tenant Admin
+        ├── Parent
+        └── Student
+            └── Curriculum Access
+                └── Grade
+                    └── Term
+                        └── Subject
+                            └── Unit
+                                └── Lesson
+                                    ├── Lesson Content
+                                    ├── Video
+                                    ├── Infographic
+                                    └── Lesson Game
+                                        └── Questions
 
-Curriculum learning content is not public. Curriculum access starts after authentication and authorization.
+Games are treated as first-class learning resources.
 
----
+They are not required to exist before the curriculum pages can be implemented.
 
-2. High-Level Architecture
-
-                         ┌──────────────────────┐
-                         │     Landing Page     │
-                         │   Public Marketing   │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                              ┌───────────┐
-                              │   Login   │
-                              └─────┬─────┘
-                                    │
-                                    ▼
-                           Supabase Authentication
-                                    │
-                                    ▼
-                           Resolve Application Role
-                                    │
-              ┌─────────────────────┼─────────────────────┐
-              │                     │                     │
-              ▼                     ▼                     ▼
-       Platform Super Admin   Tenant Admin            Parent
-              │                     │                     │
-              ▼                     ▼                     ▼
-       Platform Dashboard    Tenant Dashboard      Parent Dashboard
-                                                            │
-                                                            ▼
-                                                       Children
-                                                            │
-                                                            ▼
-                                                      Student Data
-
-                                    │
-                                    ▼
-                                 Student
-                                    │
-                                    ▼
-                           Student Dashboard
-                                    │
-                                    ▼
-                                  Grade
-                                    │
-                                    ▼
-                                  Term
-                                    │
-                                    ▼
-                                Subject
-                                    │
-                                    ▼
-                                  Unit
-                                    │
-                                    ▼
-                                 Lesson
-                                    │
-                    ┌───────────────┼────────────────┐
-                    │               │                │
-                    ▼               ▼                ▼
-                 Content          Video         Infographic
-                    │
-                    ▼
-                  Game
+The application must therefore support curriculum navigation and learning content independently from the game implementation, while keeping a stable contract for connecting games later.
 
 ---
 
-3. Technology Stack
+2. Product Model
 
-Frontend
+TheTutor is a multi-tenant educational SaaS platform for primary-school students.
 
-- React
-- TypeScript
-- Vite
-- React Router
-- Supabase JavaScript Client
+The platform serves:
 
-Backend / Platform
+- Super Admin
+- Tenant Admin
+- Parent
+- Student
 
-- Supabase Auth
-- Supabase PostgreSQL
-- Row Level Security
-- Supabase Realtime
-- Supabase Storage
-- Supabase RPCs
-- Supabase Edge Functions where server-side execution is required
+Each tenant is logically isolated.
 
-Analytics
+A student's identity within a tenant must never be resolved by name alone.
 
-Learning events, game attempts, progress, XP, mastery and aggregate metrics are stored in PostgreSQL and are intended to feed the analytics layer.
+The authoritative relationship is based on identifiers and tenant membership.
 
-Python-based analytics processing may be introduced as a separate backend/worker layer without changing the core database contract.
+Names are presentation data only.
 
 ---
 
-4. Authentication Architecture
+3. Tenant Isolation
 
-Supabase Auth is the identity provider.
+Tenant isolation is a core architectural requirement.
 
-The authenticated user's identity is represented by:
+The application must always distinguish between:
 
-auth.users.id
-        │
-        ▼
-public.profiles.id
+platform identity
+tenant membership
+student profile
+curriculum access
 
-The application must never use client-editable user metadata as an authorization source.
+A student may potentially be associated with more than one tenant.
 
-Authorization is determined from trusted database records and RLS policies.
+Therefore:
 
----
+student name
 
-5. Role Model
+is never considered a unique identifier.
 
-5.1 Platform Super Admin
+The system must use stable identifiers such as:
 
-The platform-level administrator is represented by:
-
-public.profiles.role = 'super_admin'
-
-The Super Admin operates outside normal tenant administration.
-
-Responsibilities include:
-
-- Tenant management
-- Tenant creation
-- Subscription/package management
-- Platform-level monitoring
-- Platform administration
-- Support operations
-- Platform-wide reporting
-- Managing tenant administrators
-
-The Super Admin must not be treated as an ordinary tenant member.
-
----
-
-5.2 Tenant Admin
-
-Tenant administration is represented by:
-
-public.tenant_memberships
-
-with:
-
-role = 'tenant_admin'
-status = 'active'
-
-Tenant Admin permissions are tenant-scoped.
-
-A Tenant Admin can manage the operational data belonging to the tenant, subject to RLS and application authorization.
-
-Tenant Admin does not become a platform Super Admin.
-
----
-
-5.3 Parent
-
-Parents are authenticated users with tenant membership:
-
-tenant_memberships.role = 'parent'
-
-Parent/student relationships are represented through:
-
-tenant_parent_students
-
-This relationship allows one parent to be associated with multiple students.
-
-The application must therefore never assume:
-
-one parent → one student
-
-The correct model is:
-
-Parent
-  │
-  ├── Student A
-  ├── Student B
-  ├── Student C
-  └── ...
-
-A parent may have children in different grades and may potentially have children associated with different tenants.
-
-The Parent Dashboard must therefore load the parent's authorized student relationships rather than assuming a single current student.
-
----
-
-5.4 Student
-
-Students have tenant-scoped educational identities through:
-
-tenant_student_profiles
-
-The important relationship is:
-
-tenant_student_profiles
-├── tenant_id
-├── profile_id
-├── student_code
-├── display_name
-├── grade_id
-├── avatar_url
-├── xp
-├── level
-└── is_active
-
-This allows the same global identity to have a tenant-specific educational profile.
-
-The Student Dashboard must resolve the student's active tenant context before loading curriculum data.
-
----
-
-6. Tenant Isolation
-
-Tenant isolation is mandatory.
-
-Tenant-owned records contain:
-
+user_id
+profile_id
+student_profile_id
 tenant_id
 
-where appropriate.
+and the database/RLS layer must enforce tenant boundaries.
 
-Examples include:
-
-- grades
-- terms
-- subjects
-- units
-- lessons
-- questions
-- games
-- game sessions
-- learning events
-- lesson progress
-- achievements
-- recommendations
-- analytics
-- challenges
-- social data
-- subscriptions
-- content pipeline data
-
-The frontend must never attempt to bypass RLS.
-
-The client uses the publishable Supabase key only.
-
-Service-role credentials must never be shipped to the browser.
+Client-side filtering is not considered a security boundary.
 
 ---
 
-7. Authorization Flow
+4. Authentication and Roles
 
-The application follows this sequence:
+The authentication layer is based on Supabase Auth.
 
-User opens application
-        │
-        ▼
+The authenticated account is resolved to its application profile and role.
+
+Supported roles:
+
+super_admin
+tenant_admin
+parent
+student
+
+The login flow is:
+
 Landing Page
-        │
-        ▼
+      ↓
 Login
-        │
-        ▼
-Supabase Auth
-        │
-        ▼
-Authenticated session
-        │
-        ▼
-Load trusted profile / membership context
-        │
-        ▼
-Resolve role
-        │
-        ├── super_admin
-        │       ↓
-        │   Platform Dashboard
-        │
-        ├── tenant_admin
-        │       ↓
-        │   Tenant Dashboard
-        │
-        ├── parent
-        │       ↓
-        │   Parent Dashboard
-        │
-        └── student
-                ↓
-          Student Dashboard
+      ↓
+Authenticated User
+      ↓
+Profile / Role Resolution
+      ↓
+Role-specific Dashboard
 
-The role must be resolved before protected application routes are rendered.
+The role-specific destinations are:
+
+Super Admin
+    ↓
+SuperAdminDashboard
+
+Tenant Admin
+    ↓
+TenantAdminDashboard
+
+Parent
+    ↓
+ParentDashboard
+
+Student
+    ↓
+StudentDashboard
+
+The client must not trust arbitrary role values supplied by the user.
+
+Authorization must ultimately be enforced by the backend/database policies.
 
 ---
 
-8. Route Architecture
+5. Public Application Flow
 
-Public Routes
+The public application starts with a landing page.
 
 /
 
-Landing page.
+The landing page provides:
+
+- platform introduction
+- educational value proposition
+- curriculum overview
+- platform features
+- login entry point
+
+The login page is:
 
 /login
 
-Authentication page.
+After authentication, the application resolves the user's role and routes to the appropriate dashboard.
 
 ---
 
-9. Protected Dashboard Routes
+6. Student Curriculum Flow
 
-Super Admin
-
-/dashboard/super-admin
-
-Future sections may include:
-
-/dashboard/super-admin/tenants
-/dashboard/super-admin/plans
-/dashboard/super-admin/subscriptions
-/dashboard/super-admin/users
-/dashboard/super-admin/audit
-
----
-
-Tenant Admin
-
-/dashboard/tenant-admin
-
-Future sections may include:
-
-/dashboard/tenant-admin/students
-/dashboard/tenant-admin/parents
-/dashboard/tenant-admin/teachers
-/dashboard/tenant-admin/curriculum
-/dashboard/tenant-admin/games
-/dashboard/tenant-admin/content
-/dashboard/tenant-admin/reports
-
-All tenant-admin routes must operate inside the authenticated tenant context.
-
----
-
-Parent
-
-/dashboard/parent
-
-Future sections:
-
-/dashboard/parent/children
-/dashboard/parent/children/:studentId
-/dashboard/parent/progress
-/dashboard/parent/performance
-/dashboard/parent/recommendations
-
-The parent may switch between authorized children.
-
----
-
-Student
-
-/dashboard/student
-
-The Student Dashboard is the entry point to the learning experience.
-
----
-
-10. Student Curriculum Navigation
-
-The student curriculum flow is:
+The student curriculum navigation is hierarchical.
 
 Student Dashboard
-       │
-       ▼
-Current Student Grade
-       │
-       ▼
-Terms
-       │
-       ├── Term 1
-       │
-       └── Term 2
-       │
-       ▼
-Subjects
-       │
-       ▼
-Units
-       │
-       ▼
-Lessons
-       │
-       ▼
+      ↓
+Grade
+      ↓
+Term
+      ↓
+Subject
+      ↓
+Unit
+      ↓
 Lesson
 
-The student must not browse arbitrary curriculum records.
+The current route hierarchy follows this model:
 
-Curriculum queries are filtered by the student's authorized tenant and grade context through RLS and application logic.
+/grades/:gradeId/terms
+/grades/:gradeId/terms/:termId/subjects
+/grades/:gradeId/terms/:termId/subjects/:subjectId/units
+/grades/:gradeId/terms/:termId/subjects/:subjectId/units/:unitId/lessons
+/grades/:gradeId/terms/:termId/subjects/:subjectId/units/:unitId/lessons/:lessonId
 
----
+IDs in routes are navigation identifiers only.
 
-11. Curriculum Database Hierarchy
-
-The canonical hierarchy is:
-
-tenants
-   │
-   ▼
-grades
-   │
-   ▼
-terms
-   │
-   ▼
-subjects
-   │
-   ▼
-units
-   │
-   ▼
-lessons
-
-Relationships are represented by the existing database foreign keys.
-
-The frontend must respect this hierarchy instead of creating duplicate client-side curriculum models.
+They must not bypass database authorization.
 
 ---
 
-12. Existing Curriculum Pages
+7. Lesson Architecture
 
-The current curriculum pages are:
+A lesson is a learning resource composed of multiple content types.
 
-GradesPage
-TermsPage
-SubjectsPage
-UnitsPage
-LessonPage
-
-They are learning-content components.
-
-They are not public pages.
-
-They should ultimately be rendered inside the authenticated Student Dashboard flow.
-
----
-
-13. Lesson Experience
-
-The Lesson page is the complete learning experience for a single lesson.
-
-It can contain:
+A lesson may contain:
 
 Lesson
-├── Title
-├── Summary
-├── Progress
-├── Video
-├── Infographic
-├── Structured Content
-├── Lesson Assets
-├── Vocabulary
-├── Learning Objectives
-├── Activities
-└── Lesson Game
+├── title
+├── description/content
+├── video
+├── infographic
+├── progress
+└── game
 
-The database already supports lesson content through:
+The lesson page should therefore provide a complete learning experience rather than displaying only textual content.
 
-lessons
-lesson_assets
-lesson_content_blocks
-content_versions
-lesson_vocabulary
-learning_objectives
-lesson_concepts
+The intended lesson experience is:
 
-The frontend should use these canonical sources.
-
----
-
-14. Video
-
-Lesson video is represented by the existing lesson/content asset model.
-
-The current lesson model also contains:
-
-video_url
-
-The frontend may render a YouTube embed when the URL is a valid YouTube URL.
-
-External video URLs must open safely using appropriate browser security attributes.
-
----
-
-15. Infographics
-
-Infographics are represented through:
-
-lesson_assets
-
-with:
-
-asset_type = 'infographic'
-
-The existing lesson model also contains:
-
-infographic_url
-
-The application should support both the canonical asset model and the existing lesson compatibility field while the content model is being normalized.
-
----
-
-16. Lesson Progress
-
-Student lesson progress is represented by:
-
-lesson_progress
-
-Important fields include:
-
-student_profile_id
-lesson_id
-status
-completion_percent
-first_started_at
-completed_at
-last_accessed_at
-time_spent_seconds
-tenant_id
-
-Supported lesson states:
-
-not_started
-in_progress
-completed
-
-The Lesson page displays the student's progress.
-
-Progress belongs to the student and tenant context and must never be exposed across tenants.
-
----
-
-17. Game Architecture
-
-The game system is hierarchical.
-
-Subject Game
-Unit Game
+Lesson
+  ↓
+Lesson Content
+  ↓
+Video Explanation
+  ↓
+Infographic
+  ↓
+Student Progress
+  ↓
 Lesson Game
 
-The database model uses:
-
-game_templates
-        │
-        ▼
-game_definitions
-        │
-        ▼
-game_definition_questions
-        │
-        ▼
-questions
-
-Game scope is represented by:
-
-game_definitions.scope_type
-
-Supported scopes include:
-
-lesson
-unit
-subject
-course
-challenge
+The absence of a game must not prevent the lesson itself from loading.
 
 ---
 
-18. Game Eligibility
+8. Content Resources
 
-Games must respect learning progression.
+Educational content is treated as data-driven content.
 
-A game must only use questions that the student is authorized to access.
+Lesson resources may include:
 
-Lesson-level game questions are connected through:
+content
+video_url
+infographic_url
 
-question_lessons
+These resources can be injected through the content pipeline.
 
-The game engine is responsible for applying eligibility and question-selection rules.
+The content pipeline must not require game assets to exist before a lesson can be published.
 
-The frontend must not implement authorization by filtering question data after downloading unauthorized records.
+Games are independently managed learning resources.
 
 ---
 
-19. Game Runtime
+9. Game Architecture
 
-Runtime data is represented by:
+Games are first-class educational resources.
 
-game_sessions
-game_session_questions
-question_attempts
+The platform will eventually contain internal game implementations inside the same repository.
 
-The runtime flow is:
+The objective is to avoid unnecessary external game infrastructure and reduce resource and hosting complexity where practical.
+
+The game system must support multiple game types rather than one universal game implementation.
+
+Examples include:
+
+multiple choice
+true / false
+matching
+ordering
+classification
+memory
+timed challenge
+progressive challenge
+mixed question game
+
+The exact game catalogue may expand over time.
+
+The application architecture must therefore use a common game contract rather than hard-coding one game type into curriculum pages.
+
+---
+
+10. Game Scope
+
+Games exist at three curriculum levels.
+
+10.1 Lesson Game
+
+A lesson game evaluates the student's understanding of a specific lesson.
+
+Lesson
+  ↓
+Lesson Game
+
+The game can only use questions eligible for that lesson and the student's current learning state.
+
+---
+
+10.2 Unit Game
+
+A unit game evaluates the lessons belonging to a unit.
+
+Unit
+ ├── Lesson 1
+ ├── Lesson 2
+ ├── Lesson 3
+ └── Unit Game
+
+The question pool must be restricted to eligible lessons within the unit.
+
+---
+
+10.3 Subject Game
+
+A subject game evaluates the student's completed learning scope within the subject.
+
+Subject
+ ├── Unit
+ │    ├── Lesson
+ │    └── Lesson
+ ├── Unit
+ │    ├── Lesson
+ │    └── Lesson
+ └── Subject Game
+
+The game must not automatically expose questions from lessons that the student has not completed.
+
+---
+
+11. Game Eligibility
+
+Game eligibility is determined from the student's actual learning progress.
+
+The game system must distinguish between:
+
+lesson exists
+
+and:
+
+student completed lesson
+
+Only the second condition makes lesson content eligible for student gameplay.
+
+Conceptually:
 
 Student
-   │
-   ▼
-Game Definition
-   │
-   ▼
-Start Game
-   │
-   ▼
+   ↓
+Completed Lessons
+   ↓
+Eligible Questions
+   ↓
 Game Session
-   │
-   ▼
-Session Questions
-   │
-   ▼
-Question
-   │
-   ▼
-Answer
-   │
-   ▼
-Question Attempt
-   │
-   ▼
-Complete Game
-   │
-   ▼
-Score / Accuracy / XP
 
-Game state changes must be performed through the authorized database/game runtime contract.
+This rule applies to:
+
+- lesson games
+- unit games
+- subject games
+
+The frontend must never be the authoritative source for eligibility.
+
+Eligibility must be derived from trusted application/database state.
 
 ---
 
-20. Game Difficulty
+12. Difficulty System
 
-The question bank supports difficulty classifications including:
+Games support multiple difficulty levels.
+
+The baseline difficulty model is:
 
 easy
 medium
 hard
 
-and compatible levels:
+Difficulty is a property of the game/question experience, not merely a visual label.
 
-beginner
-intermediate
-advanced
+The question-selection system must be capable of selecting questions according to the requested difficulty.
 
-Game templates determine how questions are rendered and how the available question types are presented.
+The system must also allow future expansion, for example:
+
+easy
+medium
+hard
+expert
+adaptive
+
+without requiring changes to the curriculum hierarchy.
 
 ---
 
-21. Analytics
+13. Adaptive / Progressive Gameplay
 
-Learning analytics are derived from:
+The game system is designed to support progressive difficulty.
 
-learning_events
-lesson_progress
-game_sessions
-question_attempts
-concept_mastery
-student_subject_metrics
-analytics_daily_student
-analytics_concept_daily
+A game session may evaluate:
 
-The system can calculate:
+accuracy
+speed
+attempt history
+difficulty performance
+completed lessons
+question history
 
-- lesson completion
-- question accuracy
-- game scores
-- XP
-- mastery
-- time spent
-- streaks
-- subject performance
-- concept performance
+and use those signals to determine the appropriate next question or difficulty.
+
+The first implementation does not have to be fully adaptive.
+
+However, the data model and game contract must not prevent adaptive gameplay later.
+
+---
+
+14. Question Bank
+
+Questions are independent learning objects.
+
+A question may contain:
+
+question content
+question type
+difficulty
+lesson association
+unit/subject scope
+answer data
+explanation
+metadata
+
+Questions should be associated with curriculum content through stable identifiers.
+
+The system must avoid relying on question titles or lesson names as relationships.
+
+---
+
+15. Game Definition
+
+A game definition represents the configuration of a playable game.
+
+Conceptually:
+
+GameDefinition
+├── id
+├── scope
+├── scope_id
+├── game_type
+├── difficulty
+├── title
+├── configuration
+├── route
+└── enabled
+
+Where:
+
+scope =
+    lesson
+    unit
+    subject
+
+The game definition identifies which curriculum level the game belongs to.
+
+The route is an application navigation resource.
+
+It is not an authorization mechanism.
+
+---
+
+16. Internal Game Routes
+
+Games will ultimately be implemented inside the TheTutor repository.
+
+The route structure should remain predictable.
+
+Conceptually:
+
+/games/lesson/:gameId
+/games/unit/:gameId
+/games/subject/:gameId
+
+The exact route implementation may evolve, but curriculum pages must depend on a stable game reference rather than knowing implementation details of the game component.
+
+---
+
+17. Game URL / Route Reference
+
+The curriculum layer may expose a game route/reference.
+
+For example:
+
+lesson
+  ↓
+game reference
+  ↓
+/games/lesson/:gameId
+
+This reference is analogous to other content resources such as:
+
+video_url
+infographic_url
+
+but it has an important architectural difference:
+
+A game route identifies an interactive application resource.
+
+It must not be treated as a public unauthenticated resource.
+
+The game route must validate:
+
+authenticated user
+tenant context
+student profile
+game scope
+game eligibility
+
+before allowing gameplay.
+
+---
+
+18. Game Session
+
+A game session represents one actual play attempt.
+
+Conceptually:
+
+Student
+   ↓
+Game
+   ↓
+Game Session
+   ↓
+Questions
+   ↓
+Answers
+   ↓
+Score
+   ↓
+Analytics
+
+A session should be associated with stable identifiers.
+
+A session must not rely on client-provided student names.
+
+---
+
+19. Scoring
+
+Game scoring must support more than a single raw score.
+
+Potential metrics include:
+
+score
+correct answers
+incorrect answers
+accuracy
+time
+difficulty
+completion
+streak
+
+The scoring model must remain extensible.
+
+The raw game result should be persisted before higher-level analytics are generated.
+
+---
+
+20. Analytics
+
+Game results feed the learning analytics layer.
+
+The analytics pipeline can eventually calculate:
+
+subject performance
+unit performance
+lesson performance
+difficulty performance
+question-type performance
+progress trends
+weak areas
+strong areas
+recommendations
+
+These results can be consumed by:
+
+Student Dashboard
+Parent Dashboard
+
+Tenant and platform administration may receive aggregate analytics according to authorization.
+
+---
+
+21. Parent Experience
+
+A parent may have multiple children.
+
+The parent dashboard therefore follows:
+
+Parent
+ ├── Student A
+ ├── Student B
+ └── Student C
+
+Children may belong to different grades.
+
+The parent dashboard must use student identifiers and tenant relationships rather than assuming all children share:
+
+grade
+tenant
+subject
+
+The parent experience can expose:
+
+- lesson progress
+- subject progress
+- game results
+- performance summaries
 - recommendations
 
----
-
-22. Parent Analytics
-
-The Parent Dashboard consumes authorized student data.
-
-The parent experience should provide:
-
-Children
-   │
-   ├── Grade
-   ├── Subject Progress
-   ├── Lesson Completion
-   ├── Game Performance
-   ├── Accuracy
-   ├── Mastery
-   ├── XP
-   ├── Achievements
-   └── Recommendations
-
-A parent may switch between children.
-
-The backend/RLS layer remains the authority for which children the parent can see.
+according to authorized relationships.
 
 ---
 
-23. Super Admin Architecture
+22. Tenant Admin Experience
 
-The Super Admin is platform-level.
+Tenant Admin manages the educational operation of its own tenant.
 
-The Super Admin Dashboard should eventually provide:
+Tenant Admin must only access resources belonging to its tenant.
 
-Platform Overview
-├── Tenants
-├── Tenant Status
-├── Plans
-├── Subscriptions
-├── Platform Users
-├── Usage
-├── Audit Logs
-├── Content Pipeline
-└── Platform Health
+The tenant boundary applies to:
 
-Super Admin operations must be separated from normal tenant operations.
+students
+parents
+curriculum assignments
+progress
+games
+attempts
+analytics
 
----
-
-24. Tenant Admin Architecture
-
-The Tenant Admin Dashboard manages one tenant.
-
-Expected areas:
-
-Tenant Overview
-├── Students
-├── Parents
-├── Teachers / Staff
-├── Curriculum
-├── Lessons
-├── Games
-├── Challenges
-├── Content
-├── Reports
-└── Tenant Settings
-
-Every operation must remain tenant-scoped.
+Tenant Admin must never obtain unrestricted access to another tenant through route manipulation or client-side state.
 
 ---
 
-25. Parent-Student Linking
+23. Super Admin Experience
 
-Parent/student linking uses:
+Super Admin operates at platform level.
 
-parent_invitations
-tenant_parent_students
+Super Admin responsibilities may include:
 
-The invitation flow is:
+tenant management
+subscription management
+platform administration
+tenant creation
+support operations
+platform analytics
 
-Tenant Admin
-     │
-     ▼
-Create Parent Invitation
-     │
-     ▼
-Parent receives / enters invitation
-     │
-     ▼
-Authenticated Parent
-     │
-     ▼
-Validate invitation
-     │
-     ▼
-Create parent ↔ student relationship
+Super Admin access is distinct from Tenant Admin access.
 
-A parent can subsequently have multiple authorized children.
+The architecture must not treat the two roles as interchangeable.
 
 ---
 
-26. Realtime and Social Features
+24. Curriculum Data Layer
 
-The database already contains infrastructure for:
+The curriculum hierarchy is:
 
-friendships
-conversations
-conversation_members
-messages
-game_rooms
-game_room_players
+Grade
+  ↓
+Term
+  ↓
+Subject
+  ↓
+Unit
+  ↓
+Lesson
 
-These features will use Supabase Realtime where appropriate.
+The data layer must expose typed functions for loading these resources.
 
-Social features must remain tenant-scoped and student-authorized.
+Curriculum pages should not contain duplicated database logic.
 
----
+The preferred pattern is:
 
-27. Weekly Challenges
-
-Challenges are represented by:
-
-challenges
-challenge_questions
-challenge_participants
-challenge_attempts
-
-A challenge may be associated with a grade and has:
-
-starts_at
-ends_at
-status
-recurrence
-timezone
-
-The default timezone currently represented in the schema is:
-
-Africa/Cairo
-
-The challenge system supports scheduled/live/finished lifecycle states.
-
----
-
-28. Content Pipeline
-
-The content system supports controlled curriculum content generation and import.
-
-Relevant tables include:
-
-curriculum_sources
-lesson_source_refs
-content_import_batches
-content_generation_jobs
-content_versions
-lesson_assets
-lesson_content_blocks
-
-Content must pass validation before publication.
-
-The content pipeline is:
-
-Source
-   │
-   ▼
-Import / Generation
-   │
-   ▼
-Validation
-   │
-   ▼
-Review
-   │
-   ▼
-Approval
-   │
-   ▼
-Publication
-   │
-   ▼
-Student Learning Experience
-
----
-
-29. Security Model
-
-RLS is mandatory.
-
-Every exposed public-schema table has RLS enabled.
-
-Authorization must be based on:
-
-auth.uid()
-trusted profile data
-tenant membership
-tenant-scoped student identity
-parent/student relationship
-
-Never use editable client metadata as an authorization source.
-
-Never expose:
-
-service_role
-secret keys
-privileged database credentials
-
-to the frontend.
-
----
-
-30. Frontend Authorization Boundaries
-
-The frontend must implement route guards:
-
-PublicRoute
-ProtectedRoute
-RoleRoute
-TenantRoute
-StudentRoute
-ParentRoute
-
-However, frontend guards are only UX/security boundaries at the client level.
-
-The database RLS policies remain the authoritative security boundary.
-
----
-
-31. Route Guard Behavior
-
-If no authenticated session exists:
-
-Protected route
-      ↓
-/login
-
-If the authenticated user's role does not match the route:
-
-Unauthorized
-      ↓
-appropriate dashboard
-
-If the user has no valid tenant context:
-
-Tenant-scoped route
-      ↓
-tenant selection / access error
-
-If a student attempts to access another student's data:
-
-RLS
+Page
  ↓
-deny
-
-The frontend must not attempt to work around this denial.
-
----
-
-32. Application Layout
-
-The future React structure should evolve toward:
-
-src/
-├── app/
-│   ├── App.tsx
-│   ├── routes/
-│   └── guards/
-│
-├── components/
-│
-├── layouts/
-│   ├── PublicLayout
-│   ├── PlatformAdminLayout
-│   ├── TenantAdminLayout
-│   ├── ParentLayout
-│   └── StudentLayout
-│
-├── pages/
-│   ├── LandingPage
-│   ├── LoginPage
-│   ├── dashboards/
-│   │   ├── SuperAdminDashboard
-│   │   ├── TenantAdminDashboard
-│   │   ├── ParentDashboard
-│   │   └── StudentDashboard
-│   │
-│   └── curriculum/
-│       ├── GradesPage
-│       ├── TermsPage
-│       ├── SubjectsPage
-│       ├── UnitsPage
-│       └── LessonPage
-│
-├── lib/
-│   ├── database.ts
-│   ├── curriculum.ts
-│   ├── auth.ts
-│   └── games.ts
-│
-└── main.tsx
-
-The current repository may temporarily keep the existing flat "pages" structure while the dashboard layer is introduced.
+Curriculum / Database Service
+ ↓
+Supabase
 
 ---
 
-33. Current Repository Integration
+25. Game Data Layer
 
-The existing curriculum implementation remains the foundation for the Student learning flow.
+Game data should follow the same principle.
 
-Current pages:
+The preferred pattern is:
 
-GradesPage
-TermsPage
-SubjectsPage
-UnitsPage
-LessonPage
+Game Page
+ ↓
+Game Service
+ ↓
+Game Definition
+ ↓
+Question Eligibility
+ ↓
+Question Bank
+ ↓
+Game Session
 
-Current database integration:
-
-src/lib/database.ts
-src/lib/curriculum.ts
-
-These files must remain aligned with the actual Supabase schema.
-
-No duplicate schema definitions should be introduced into page components.
-
----
-
-34. App Router Direction
-
-The final "App.tsx" should evolve from the current curriculum-only router into a role-aware application router.
-
-Target structure:
-
-/
-└── LandingPage
-
-/login
-└── LoginPage
-
-/dashboard
-├── super-admin
-├── tenant-admin
-├── parent
-└── student
-
-/dashboard/student
-└── curriculum flow
-
-/dashboard/student/grades
-└── Grades
-
-/dashboard/student/grades/:gradeId/terms
-└── Terms
-
-/dashboard/student/grades/:gradeId/terms/:termId/subjects
-└── Subjects
-
-/dashboard/student/grades/:gradeId/terms/:termId/subjects/:subjectId/units
-└── Units
-
-/dashboard/student/grades/:gradeId/terms/:termId/subjects/:subjectId/units/:unitId/lessons
-└── Lessons
-
-/dashboard/student/grades/:gradeId/terms/:termId/subjects/:subjectId/units/:unitId/lessons/:lessonId
-└── Lesson
-
-The curriculum pages should eventually be nested under the Student layout.
+The curriculum pages should not implement question selection themselves.
 
 ---
 
-35. Migration Strategy
+26. Separation of Responsibilities
 
-The application must be built incrementally.
+The following responsibilities must remain separated.
 
-Phase 1 — Foundation
+Curriculum
 
-- Supabase client
-- Auth session
-- Role resolution
-- Protected routes
-- Public landing page
-- Login page
-
-Phase 2 — Dashboards
-
-Build:
-
-1. Super Admin Dashboard
-2. Tenant Admin Dashboard
-3. Parent Dashboard
-4. Student Dashboard
-
-Phase 3 — Student Curriculum
-
-Integrate the existing:
-
-Grades
-Terms
-Subjects
-Units
-Lessons
-
-inside the Student Dashboard.
-
-Phase 4 — Game Runtime
-
-Build:
-
-- Lesson Game
-- Unit Game
-- Subject Game
-- Game runtime
-- Game results
-- Progress integration
-
-Phase 5 — Parent Analytics
-
-Build:
-
-- child switching
-- progress
-- performance
-- mastery
-- recommendations
-- achievements
-
-Phase 6 — Tenant Administration
-
-Build:
-
-- student management
-- parent management
-- staff
-- curriculum administration
-- content
-- games
-- challenges
-- reports
-
-Phase 7 — Platform Administration
-
-Build:
-
-- tenant management
-- plans
-- subscriptions
-- platform analytics
-- audit
-- support tooling
-
-Phase 8 — Social / Realtime
-
-Build:
-
-- friends
-- messaging
-- multiplayer rooms
-- weekly challenges
-
----
-
-36. Current Development Rule
-
-The project must not enter uncontrolled modification cycles.
-
-Before changing a file:
-
-1. Read the current repository version.
-2. Read the relevant database schema.
-3. Verify the actual table/function/column names.
-4. Make the smallest coherent change.
-5. Run typecheck.
-6. Run lint.
-7. Run build.
-8. Commit.
-9. Push.
-10. Verify the resulting repository state.
-11. Continue to the next architectural layer.
-
-No assumptions should be made about files, functions, routes, database columns, or database policies without verifying them against the actual repository or live Supabase schema.
-
----
-
-37. Source of Truth
-
-For database structure:
-
-Supabase PostgreSQL schema
-
-For frontend implementation:
-
-Git repository
-
-For authentication identity:
-
-Supabase Auth
-
-For authorization:
-
-PostgreSQL RLS + trusted database relationships
-
-For application routing:
-
-React Router
-
-For curriculum hierarchy:
+Responsible for:
 
 grades
-→ terms
-→ subjects
-→ units
-→ lessons
+terms
+subjects
+units
+lessons
+lesson resources
 
-For student-specific educational identity:
+Games
 
-tenant_student_profiles
+Responsible for:
 
-For parent-child relationships:
+game definitions
+game types
+difficulty
+question selection
+sessions
+answers
+scores
 
-tenant_parent_students
+Analytics
 
-For tenant membership:
+Responsible for:
 
-tenant_memberships
-
-For lesson progress:
-
-lesson_progress
-
-For games:
-
-game_templates
-→ game_definitions
-→ game_definition_questions
-→ questions
-
-For game runtime:
-
-game_sessions
-→ game_session_questions
-→ question_attempts
-
----
-
-38. Non-Negotiable Architecture Rules
-
-Rule 1
-
-Curriculum is authenticated content.
-
-Do not grant anonymous access to curriculum tables merely to make the landing page render.
-
-Rule 2
-
-Tenant isolation is mandatory.
-
-Every tenant-scoped operation must respect "tenant_id".
-
-Rule 3
-
-The Super Admin is platform-level.
-
-Do not treat the Super Admin as an ordinary tenant member.
-
-Rule 4
-
-Tenant Admin is tenant-scoped.
-
-Its authority comes from an active "tenant_memberships" record.
-
-Rule 5
-
-Parents can have multiple children.
-
-Never hard-code one-parent/one-student behavior.
-
-Rule 6
-
-Students use tenant-scoped educational identities.
-
-Use "tenant_student_profiles" for student learning context.
-
-Rule 7
-
-RLS is authoritative.
-
-Frontend route guards do not replace database authorization.
-
-Rule 8
-
-Do not duplicate the database schema in React.
-
-The database contract is the source of truth.
-
-Rule 9
-
-Games must use the game engine contract.
-
-Do not expose raw question-bank access to students.
-
-Rule 10
-
-Do not modify working curriculum pages without first checking their current repository implementation and database contract.
-
----
-
-39. Current Status
-
-The current repository has the curriculum navigation layer implemented:
-
-Grades
-  ↓
-Terms
-  ↓
-Subjects
-  ↓
-Units
-  ↓
-Lessons
-
-The current database already provides the required multi-tenant identity model:
-
-Profiles
-Tenant Memberships
-Tenant Student Profiles
-Tenant Parent Students
-
-The next implementation layer is therefore:
+performance analysis
+progress analysis
+recommendations
 
 Authentication
-      ↓
-Role Resolution
-      ↓
-Protected Routing
-      ↓
-Dashboards
-      ↓
-Student Curriculum Integration
 
-The existing curriculum pages should be reused rather than rewritten unnecessarily.
+Responsible for:
+
+identity
+session
+role
+authorization context
+
+Database/RLS
+
+Responsible for:
+
+tenant isolation
+data access policies
+relationship enforcement
 
 ---
 
-40. Architectural Goal
+27. Do Not Couple Curriculum Pages to Game Implementation
 
-The final platform should behave as:
+A curriculum page must not contain game-specific business logic.
 
-                    TheTutor
-                       │
-             ┌─────────┴─────────┐
-             │                   │
-          Public              Authenticated
-          Website                 │
-             │                    ▼
-          Landing              Role
-             │                    │
-             ▼          ┌────────┼────────┐
-           Login         │        │        │
-                        ▼        ▼        ▼
-                    Platform   Tenant   Parent
-                    Admin      Admin      │
-                                          ▼
-                                      Children
-                                          
-                             Student
-                                │
-                                ▼
-                          Student Dashboard
-                                │
-                 ┌──────────────┴──────────────┐
-                 ▼                             ▼
-              Learning                       Games
-                 │                             │
-        Grade → Term → Subject           Lesson / Unit /
-                 → Unit → Lesson            Subject Games
-                 │                             │
-                 └──────────────┬──────────────┘
-                                ▼
-                           Analytics
-                                │
-                         ┌──────┴──────┐
-                         ▼             ▼
-                      Student       Parent
-                      Insights      Insights
+For example, "LessonPage" should not know:
 
-This architecture preserves the existing database foundation while adding the missing application-level authentication, role-based routing, dashboards, and student learning experience.
+how a matching game works
+how questions are selected
+how difficulty is calculated
+how score is calculated
+
+It should only know:
+
+this lesson has an available game
+
+and provide the navigation entry point.
+
+This allows game implementations to evolve independently.
+
+---
+
+28. Game Extensibility
+
+The game engine must support multiple implementations behind a common interface.
+
+Conceptually:
+
+GameEngine
+   ↓
+GameType
+   ├── MultipleChoiceGame
+   ├── TrueFalseGame
+   ├── MatchingGame
+   ├── OrderingGame
+   ├── MemoryGame
+   └── TimedChallengeGame
+
+The exact component architecture is implementation-specific.
+
+The important architectural requirement is that adding a new game type must not require rebuilding the curriculum hierarchy.
+
+---
+
+29. Resource Strategy
+
+The project intentionally favors internal reusable game components.
+
+Instead of deploying a separate application for every game, reusable game engines/components should be implemented inside the TheTutor repository wherever practical.
+
+The preferred model is:
+
+TheTutor Repository
+├── curriculum
+├── dashboards
+├── authentication
+├── game engine
+└── game implementations
+
+This reduces unnecessary duplication.
+
+Individual game instances should primarily be represented as data/configuration when possible.
+
+---
+
+30. Content Injection
+
+The content injector is responsible for educational content ingestion.
+
+The pipeline may produce:
+
+lesson metadata
+lesson content
+video URL
+infographic URL
+game configuration/reference
+
+Content ingestion must use stable IDs and explicit relationships.
+
+It must never use display names as primary relationships.
+
+---
+
+31. Student Progress
+
+Progress must be represented as persistent application data.
+
+Conceptually:
+
+Student
+ ↓
+Lesson Progress
+ ↓
+Completed Lessons
+ ↓
+Eligible Game Content
+
+Completion is therefore both:
+
+a learning metric
+
+and:
+
+an eligibility signal for gameplay
+
+---
+
+32. Security Principles
+
+The architecture follows these rules:
+
+1. Authentication is not authorization.
+2. Client-side state is not a security boundary.
+3. Tenant isolation is enforced by database policies.
+4. Names are never unique identifiers.
+5. Student eligibility is derived from trusted relationships.
+6. Game routes require authorization.
+7. Game URLs/routes do not bypass RLS.
+8. Parent-child access is relationship-based.
+9. Tenant Admin access is tenant-scoped.
+10. Super Admin access is platform-scoped.
+
+---
+
+33. Routing Principles
+
+The router is responsible for navigation.
+
+It should not contain business logic for:
+
+question selection
+scoring
+analytics
+tenant filtering
+lesson completion
+
+Protected routes should eventually enforce authentication and role access.
+
+The final routing structure is expected to contain:
+
+/
+ /login
+
+ /dashboard
+
+ /grades/...
+ /games/lesson/...
+ /games/unit/...
+ /games/subject/...
+
+Role-specific dashboards are protected resources.
+
+Curriculum and game routes are also protected according to the access model.
+
+---
+
+34. Current Implementation Strategy
+
+Implementation proceeds from foundational resources toward dependent UI.
+
+The preferred order is:
+
+1. Architecture contract
+2. Database contract
+3. Supabase access layer
+4. Authentication / session
+5. Role resolution
+6. Dashboards
+7. Curriculum navigation
+8. Lesson resources
+9. Game data layer
+10. Game engine
+11. Individual game implementations
+12. Game sessions
+13. Scoring
+14. Analytics
+15. Parent/student reporting
+16. Final routing integration
+
+No later feature should force unnecessary reconstruction of earlier stable layers.
+
+---
+
+35. Definition of a Complete Learning Path
+
+The final student experience is:
+
+Landing
+   ↓
+Login
+   ↓
+Student Dashboard
+   ↓
+Student's Grade
+   ↓
+Term 1 / Term 2
+   ↓
+Subject
+   ↓
+Unit
+   ↓
+Lesson
+   ↓
+Lesson Content
+   ├── Video
+   ├── Infographic
+   ├── Progress
+   └── Lesson Game
+          ↓
+       Questions
+          ↓
+       Score
+          ↓
+       Analytics
+
+At higher levels:
+
+Unit
+   ↓
+Unit Game
+   ↓
+Eligible completed-lesson questions
+
+and:
+
+Subject
+   ↓
+Subject Game
+   ↓
+Eligible completed-lesson questions
+
+---
+
+36. Architectural Invariants
+
+The following are considered non-negotiable invariants.
+
+Tenant invariant
+
+Every tenant-owned resource must be scoped to its tenant.
+
+Identity invariant
+
+Stable IDs, not names, determine relationships.
+
+Curriculum invariant
+
+The curriculum hierarchy remains:
+
+Grade → Term → Subject → Unit → Lesson
+
+Game invariant
+
+Games exist at:
+
+Lesson
+Unit
+Subject
+
+Eligibility invariant
+
+A student can only receive game questions from learning content they are eligible to access, with completed lessons forming the baseline eligibility rule.
+
+Difficulty invariant
+
+Games support at least:
+
+Easy
+Medium
+Hard
+
+Extensibility invariant
+
+New game types must not require changes to the curriculum hierarchy.
+
+Security invariant
+
+Game routes and game resources remain subject to authentication, tenant isolation, and authorization.
+
+Resource invariant
+
+Internal games should be implemented as reusable repository components wherever practical.
+
+---
+
+37. Current Decision
+
+The project does not wait for game implementation before completing the core platform.
+
+The platform can be built now around stable game references.
+
+The game system will be implemented later inside the same repository and connected through the established game contract.
+
+Therefore:
+
+Curriculum development
+        ↓
+does not block
+        ↓
+Game development
+
+and:
+
+Game development
+        ↓
+does not require
+        ↓
+rebuilding curriculum pages
+
+This is the intended architecture going forward.
