@@ -23,6 +23,7 @@ import TermsPage from './pages/TermsPage';
 import SubjectsPage from './pages/SubjectsPage';
 import UnitsPage from './pages/UnitsPage';
 import LessonPage from './pages/LessonPage';
+import GameRuntimePage from './pages/GameRuntimePage';
 
 import ParentDashboard from './pages/dashboards/ParentDashboard';
 import StudentDashboard from './pages/dashboards/StudentDashboard';
@@ -337,7 +338,15 @@ function App() {
             </ProtectedCurriculumRoute>
           }
         />
-
+{/* Game Runtime */}
+        <Route
+          path="/games/:scope/:gameId"
+          element={
+            <ProtectedCurriculumRoute>
+              <GameRuntimePage />
+            </ProtectedCurriculumRoute>
+          }
+        />
         {/* Unknown routes */}
         <Route
           path="*"
