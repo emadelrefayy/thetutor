@@ -1,5 +1,8 @@
 import {
+  useEffect,
   useReducer,
+  useRef,
+  useState,
   type Dispatch,
 } from 'react';
 
@@ -20,139 +23,37 @@ import {
   getCurrentQuestion,
   getRuntimeProgress,
   initializeGameRuntime,
+  isLastQuestion,
 } from '../features/games/gameRuntime';
 
+import {
+  completeGameSession,
+  loadGameRuntime,
+  submitGameAnswer,
+} from '../features/games/gameApi';
+
 import type {
-  GameRuntimeContext,
   GameRuntimeEvent,
   GameRuntimeState,
-  SafeGameQuestion,
 } from '../features/games/gameTypes';
 
-type GameRuntimeNavigationState = {
-  context?: GameRuntimeContext;
-  questions?: SafeGameQuestion[];
-  sessionId?: string;
-};
-
-function readNavigationState(
-  value: unknown,
-): GameRuntimeNavigationState | null {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value)
-  ) {
-    return null;
-  }
-
-  return value as GameRuntimeNavigationState;
-}
-
-function createInitialState(
-  navigationState: GameRuntimeNavigationState | null,
-): GameRuntimeState {
-  const context =
-    navigationState?.context ?? null;
-
-  const questions =
-    navigationState?.questions ?? [];
-
-  const sessionId =
-    navigationState?.sessionId ?? null;
-
-  if (!context) {
-    return {
-      phase: 'error',
-      sessionId: null,
-      config: null,
-      questions: [],
-      currentQuestionIndex: 0,
-      selectedAnswer: null,
-      answerResult: null,
-      score: 0,
-      correctAnswers: 0,
-      incorrectAnswers: 0,
-      startedAt: null,
-      completedAt: null,
-      error:
-        'بيانات اللعبة غير متاحة.',
-      result: null,
-    };
-  }
-
-  if (!sessionId?.trim()) {
-    return {
-      phase: 'error',
-      sessionId: null,
-      config: null,
-      questions: [],
-      currentQuestionIndex: 0,
-      selectedAnswer: null,
-      answerResult: null,
-      score: 0,
-      correctAnswers: 0,
-      incorrectAnswers: 0,
-      startedAt: null,
-      completedAt: null,
-      error:
-        'جلسة اللعبة غير متاحة. يجب إنشاء جلسة موثقة قبل تشغيل اللعبة.',
-      result: null,
-    };
-  }
-
-  if (questions.length === 0) {
-    return {
-      phase: 'error',
-      sessionId,
-      config: null,
-      questions: [],
-      currentQuestionIndex: 0,
-      selectedAnswer: null,
-      answerResult: null,
-      score: 0,
-      correctAnswers: 0,
-      incorrectAnswers: 0,
-      startedAt: null,
-      completedAt: null,
-      error:
-        'لا توجد أسئلة آمنة متاحة لتشغيل اللعبة.',
-      result: null,
-    };
-  }
-
-  try {
-    const config =
-      createGameRuntimeConfig(
-        context.game,
-      );
-
-    return initializeGameRuntime({
-      config,
-      questions,
-      sessionId,
-    });
-  } catch (error) {
-    return {
-      phase: 'error',
-      sessionId,
-      config: null,
-      questions: [],
-      currentQuestionIndex: 0,
-      selectedAnswer: null,
-      answerResult: null,
-      score: 0,
-      correctAnswers: 0,
-      incorrectAnswers: 0,
-      startedAt: null,
-      completedAt: null,
-      error:
-        error instanceof Error
-          ? error.message
-          : 'تعذر تهيئة مشغل اللعبة.',
-      result: null,
-    };
-  }
+function createLoadingState(): GameRuntimeState {
+  return {
+    phase: 'loading',
+    sessionId: null,
+    config: null,
+    questions: [],
+    currentQuestionIndex: 0,
+    selectedAnswer: null,
+    answerResult: null,
+    score: 0,
+    correctAnswers: 0,
+    incorrectAnswers: 0,
+    startedAt: null,
+    completedAt: null,
+    error: null,
+    result: null,
+  };
 }
 
 function GameRuntimePage() {
@@ -164,13 +65,19 @@ function GameRuntimePage() {
     gameId: string;
   }>();
 
-  const location =
-    useLocation();
+  const location = useLocation();
 
-  const navigationState =
-    readNavigationState(
-      location.state,
-    );
+  const searchParams = new URLSearchParams(
+    location.search,
+  );
+
+  const tenantId =
+    searchParams.get('tenantId')?.trim() ?? '';
+
+  const studentProfileId =
+    searchParams
+      .get('studentProfileId')
+      ?.trim() ?? '';
 
   const [state, dispatch] =
     useReducer<
@@ -180,9 +87,203 @@ function GameRuntimePage() {
       ) => GameRuntimeState
     >(
       gameRuntimeReducer,
-      navigationState,
-      createInitialState,
+      undefined,
+      createLoadingState,
     );
+
+  const [loadError, setLoadError] =
+    useState<string | null>(null);
+
+  const loadedKeyRef =
+    useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!scope || !gameId) {
+      setLoadError(
+        'تعذر تحديد نطاق اللعبة أو رقم اللعبة.',
+      );
+      return;
+    }
+
+    if (!tenantId || !studentProfileId) {
+      setLoadError(
+        'بيانات المركز والطالب غير متاحة لتشغيل اللعبة.',
+      );
+      return;
+    }
+
+    const loadKey =
+      [
+        scope,
+        gameId,
+        tenantId,
+        studentProfileId,
+      ].join(':');
+
+    /*
+     * Prevent duplicate game-session creation during
+     * React Strict Mode development re-renders.
+     *
+     * loadGameRuntime creates a real backend session,
+     * therefore it must not be invoked twice for the
+     * same route/context during one mounted lifecycle.
+     */
+    if (
+      loadedKeyRef.current ===
+      loadKey
+    ) {
+      return;
+    }
+
+    loadedKeyRef.current =
+      loadKey;
+
+    let cancelled = false;
+
+    setLoadError(null);
+
+    const load = async () => {
+      try {
+        const loaded =
+          await loadGameRuntime({
+            gameId,
+            tenantId,
+            studentProfileId,
+          });
+
+        if (cancelled) {
+          return;
+        }
+
+        /*
+         * The backend/API layer has already:
+         *
+         * - authenticated the user
+         * - validated the tenant/student context
+         * - loaded the active game definition
+         * - created the trusted game session
+         * - selected eligible questions
+         * - loaded safe question data
+         * - aligned sessionQuestionIds with questions
+         */
+        const config =
+          createGameRuntimeConfig(
+            loaded.context.game,
+          );
+
+        const initialized =
+          initializeGameRuntime({
+            config,
+            questions:
+              loaded.questions,
+            sessionId:
+              loaded.sessionId,
+          });
+
+        /*
+         * gameRuntimeReducer owns the transition from
+         * ready -> playing.
+         *
+         * We intentionally do not manufacture score,
+         * correctness, XP, or eligibility here.
+         */
+        const readyState =
+          initialized;
+
+        const playingState =
+          gameRuntimeReducer(
+            readyState,
+            {
+              type: 'START',
+            },
+          );
+
+        /*
+         * The reducer itself does not contain an event
+         * for replacing the asynchronously loaded state.
+         *
+         * This dispatch is therefore represented through
+         * the page-level loaded state below.
+         */
+        setRuntimeState(
+          playingState,
+        );
+
+        setRuntimeSessionQuestionIds(
+          loaded.sessionQuestionIds,
+        );
+
+        setRuntimeContext({
+          tenantId:
+            loaded.context.tenantId,
+          studentProfileId:
+            loaded.context.studentProfileId,
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : 'تعذر تحميل اللعبة.',
+        );
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    gameId,
+    scope,
+    studentProfileId,
+    tenantId,
+  ]);
+
+  /*
+   * The actual runtime state is kept separately because
+   * the backend load is asynchronous while useReducer's
+   * initializer runs synchronously.
+   */
+  const [runtimeState, setRuntimeState] =
+    useState<GameRuntimeState>(
+      createLoadingState,
+    );
+
+  const [
+    runtimeSessionQuestionIds,
+    setRuntimeSessionQuestionIds,
+  ] = useState<string[]>([]);
+
+  const [runtimeContext, setRuntimeContext] =
+    useState<{
+      tenantId: string;
+      studentProfileId: string;
+    } | null>(null);
+
+  const runtimeDispatch =
+    (
+      event: GameRuntimeEvent,
+    ) => {
+      setRuntimeState(
+        (currentState) =>
+          gameRuntimeReducer(
+            currentState,
+            event,
+          ),
+      );
+    };
+
+  /*
+   * Keep the reducer state above and the asynchronous
+   * loading lifecycle in one rendering path.
+   */
+  const effectiveState =
+    runtimeState;
 
   if (!scope || !gameId) {
     return (
@@ -193,12 +294,43 @@ function GameRuntimePage() {
     );
   }
 
-  if (state.phase === 'error') {
+  if (!tenantId || !studentProfileId) {
+    return (
+      <RuntimeError
+        title="بيانات التشغيل غير مكتملة"
+        message="بيانات المركز والطالب غير متاحة لتشغيل اللعبة."
+      />
+    );
+  }
+
+  if (
+    effectiveState.phase ===
+    'loading'
+  ) {
+    if (loadError) {
+      return (
+        <RuntimeError
+          title="تعذر تشغيل اللعبة"
+          message={loadError}
+        />
+      );
+    }
+
+    return (
+      <RuntimeLoading />
+    );
+  }
+
+  if (
+    effectiveState.phase ===
+    'error'
+  ) {
     return (
       <RuntimeError
         title="تعذر تشغيل اللعبة"
         message={
-          state.error ??
+          effectiveState.error ??
+          loadError ??
           'حدث خطأ أثناء تشغيل اللعبة.'
         }
       />
@@ -206,8 +338,9 @@ function GameRuntimePage() {
   }
 
   if (
-    !state.config ||
-    !state.sessionId
+    !effectiveState.config ||
+    !effectiveState.sessionId ||
+    !runtimeContext
   ) {
     return (
       <RuntimeError
@@ -219,9 +352,53 @@ function GameRuntimePage() {
 
   return (
     <RuntimeGameView
-      state={state}
-      dispatch={dispatch}
+      state={effectiveState}
+      dispatch={runtimeDispatch}
+      sessionQuestionIds={
+        runtimeSessionQuestionIds
+      }
+      tenantId={
+        runtimeContext.tenantId
+      }
+      studentProfileId={
+        runtimeContext.studentProfileId
+      }
+      gameId={gameId}
     />
+  );
+}
+
+function RuntimeLoading() {
+  return (
+    <main
+      id="game-runtime-page"
+      dir="rtl"
+      className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-10"
+    >
+      <section
+        aria-live="polite"
+        className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"
+      >
+        <p className="text-sm font-semibold text-sky-600">
+          TheTutor · Game Runtime
+        </p>
+
+        <h1 className="mt-3 text-2xl font-bold text-slate-900">
+          جاري تجهيز اللعبة
+        </h1>
+
+        <p className="mt-3 text-sm leading-7 text-slate-500">
+          يتم تحميل جلسة اللعبة والأسئلة المؤهلة بأمان.
+        </p>
+
+        <div
+          className="mt-6 h-2 w-full overflow-hidden rounded-full bg-slate-100"
+          aria-hidden="true"
+        >
+          <div className="h-full w-1/2 animate-pulse rounded-full bg-sky-500" />
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -268,15 +445,68 @@ function RuntimeError({
 function RuntimeGameView({
   state,
   dispatch,
+  sessionQuestionIds,
+  tenantId,
+  studentProfileId,
+  gameId,
 }: {
   state: GameRuntimeState;
   dispatch: Dispatch<GameRuntimeEvent>;
+  sessionQuestionIds: string[];
+  tenantId: string;
+  studentProfileId: string;
+  gameId: string;
 }) {
   const question =
     getCurrentQuestion(state);
 
   const progress =
     getRuntimeProgress(state);
+
+  const questionStartedAtRef =
+    useRef<number>(Date.now());
+
+  const previousQuestionIndexRef =
+    useRef<number>(
+      state.currentQuestionIndex,
+    );
+
+  const submittingRef =
+    useRef(false);
+
+  const completingRef =
+    useRef(false);
+
+  useEffect(() => {
+    if (
+      previousQuestionIndexRef.current !==
+      state.currentQuestionIndex
+    ) {
+      previousQuestionIndexRef.current =
+        state.currentQuestionIndex;
+
+      questionStartedAtRef.current =
+        Date.now();
+    }
+  }, [
+    state.currentQuestionIndex,
+  ]);
+
+  if (
+    state.phase ===
+    'completed'
+  ) {
+    return (
+      <CompletedGame
+        state={state}
+        tenantId={tenantId}
+        studentProfileId={
+          studentProfileId
+        }
+        gameId={gameId}
+      />
+    );
+  }
 
   if (!question) {
     return (
@@ -287,18 +517,167 @@ function RuntimeGameView({
     );
   }
 
-  if (state.phase === 'completed') {
-    return (
-      <CompletedGame
-        state={state}
-      />
-    );
-  }
-
   const feedback =
     getAnswerFeedback(
       state.answerResult,
     );
+
+  const handleSubmitAnswer =
+    async () => {
+      if (
+        submittingRef.current ||
+        !canSubmitAnswer(state)
+      ) {
+        return;
+      }
+
+      const sessionQuestionId =
+        sessionQuestionIds[
+          state.currentQuestionIndex
+        ];
+
+      if (
+        !sessionQuestionId
+      ) {
+        dispatch({
+          type: 'ERROR',
+          message:
+            'تعذر مطابقة السؤال الحالي مع جلسة اللعبة.',
+        });
+
+        return;
+      }
+
+      let input;
+
+      try {
+        input =
+          createGameAnswerInput(
+            state,
+          );
+      } catch (error) {
+        dispatch({
+          type: 'ERROR',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'تعذر تجهيز الإجابة.',
+        });
+
+        return;
+      }
+
+      const responseTimeMs =
+        Math.max(
+          0,
+          Date.now() -
+            questionStartedAtRef.current,
+        );
+
+      submittingRef.current =
+        true;
+
+      dispatch({
+        type: 'SUBMIT_ANSWER',
+      });
+
+      try {
+        const result =
+          await submitGameAnswer({
+            tenantId,
+            tenantStudentProfileId:
+              studentProfileId,
+            sessionId:
+              state.sessionId!,
+            sessionQuestionId,
+            questionId:
+              input.questionId,
+            answer:
+              input.answer,
+            responseTimeMs,
+          });
+
+        dispatch({
+          type: 'ANSWER_RESULT',
+          result,
+        });
+      } catch (error) {
+        dispatch({
+          type: 'ERROR',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'تعذر إرسال الإجابة.',
+        });
+      } finally {
+        submittingRef.current =
+          false;
+      }
+    };
+
+  const handleNextQuestion =
+    async () => {
+      if (
+        state.phase !==
+        'feedback'
+      ) {
+        return;
+      }
+
+      if (
+        !isLastQuestion(state)
+      ) {
+        dispatch({
+          type: 'NEXT_QUESTION',
+        });
+
+        return;
+      }
+
+      if (
+        completingRef.current
+      ) {
+        return;
+      }
+
+      if (!state.sessionId) {
+        dispatch({
+          type: 'ERROR',
+          message:
+            'جلسة اللعبة غير متاحة لإنهاء اللعبة.',
+        });
+
+        return;
+      }
+
+      completingRef.current =
+        true;
+
+      try {
+        const result =
+          await completeGameSession({
+            gameId,
+            sessionId:
+              state.sessionId,
+          });
+
+        dispatch({
+          type: 'COMPLETE',
+          result,
+        });
+      } catch (error) {
+        dispatch({
+          type: 'ERROR',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'تعذر إنهاء جلسة اللعبة.',
+        });
+      } finally {
+        completingRef.current =
+          false;
+      }
+    };
 
   return (
     <main
@@ -313,7 +692,7 @@ function RuntimeGameView({
           </p>
 
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-            {state.config?.game.title}
+            {state.config.game.title}
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
@@ -335,7 +714,9 @@ function RuntimeGameView({
           </div>
 
           <progress
-            value={progress.percentage}
+            value={
+              progress.percentage
+            }
             max={100}
             className="h-3 w-full"
           >
@@ -429,34 +810,11 @@ function RuntimeGameView({
                 disabled={
                   !canSubmitAnswer(
                     state,
-                  )
+                  ) ||
+                  submittingRef.current
                 }
                 onClick={() => {
-                  if (
-                    !canSubmitAnswer(
-                      state,
-                    )
-                  ) {
-                    return;
-                  }
-
-                  /*
-                   * This creates the client submission payload.
-                   *
-                   * It intentionally does NOT calculate correctness.
-                   * The trusted answer layer must return ANSWER_RESULT.
-                   */
-                  const input =
-                    createGameAnswerInput(
-                      state,
-                    );
-
-                  void input;
-
-                  dispatch({
-                    type:
-                      'SUBMIT_ANSWER',
-                  });
+                  void handleSubmitAnswer();
                 }}
                 className="mt-6 w-full rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -473,7 +831,10 @@ function RuntimeGameView({
 
           {state.phase ===
             'answering' && (
-            <div className="mt-6 rounded-xl border border-sky-200 bg-sky-50 p-5">
+            <div
+              className="mt-6 rounded-xl border border-sky-200 bg-sky-50 p-5"
+              aria-live="polite"
+            >
               <p className="font-bold text-sky-900">
                 جارٍ التحقق من الإجابة
               </p>
@@ -510,15 +871,17 @@ function RuntimeGameView({
 
               <button
                 type="button"
-                onClick={() =>
-                  dispatch({
-                    type:
-                      'NEXT_QUESTION',
-                  })
+                onClick={() => {
+                  void handleNextQuestion();
+                }}
+                disabled={
+                  completingRef.current
                 }
-                className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                className="mt-5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                السؤال التالي
+                {isLastQuestion(state)
+                  ? 'إنهاء اللعبة'
+                  : 'السؤال التالي'}
               </button>
             </div>
           )}
@@ -545,11 +908,26 @@ function RuntimeGameView({
 
 function CompletedGame({
   state,
+  tenantId,
+  studentProfileId,
+  gameId,
 }: {
   state: GameRuntimeState;
+  tenantId: string;
+  studentProfileId: string;
+  gameId: string;
 }) {
   const result =
     getCompletedResult(state);
+
+  const returnTo =
+    `/grades?tenantId=${encodeURIComponent(
+      tenantId,
+    )}&studentProfileId=${encodeURIComponent(
+      studentProfileId,
+    )}&gameId=${encodeURIComponent(
+      gameId,
+    )}`;
 
   return (
     <main
@@ -569,7 +947,10 @@ function CompletedGame({
         <div className="mt-7 grid gap-4 sm:grid-cols-3">
           <Stat
             label="النقاط"
-            value={result?.score ?? state.score}
+            value={
+              result?.score ??
+              state.score
+            }
           />
 
           <Stat
@@ -590,13 +971,37 @@ function CompletedGame({
         </div>
 
         {result && (
-          <p className="mt-6 text-sm leading-7 text-slate-500">
-            النتيجة النهائية مصدرها طبقة التشغيل الموثوقة.
-          </p>
+          <div className="mt-6 space-y-2 text-sm leading-7 text-slate-500">
+            <p>
+              النتيجة النهائية مصدرها طبقة التشغيل الموثوقة.
+            </p>
+
+            <p>
+              نقاط الخبرة المكتسبة:{' '}
+              <span className="font-bold text-slate-700">
+                {result.xpEarned}
+              </span>
+            </p>
+
+            <p>
+              إجمالي الأسئلة:{' '}
+              <span className="font-bold text-slate-700">
+                {result.totalQuestions}
+              </span>
+            </p>
+
+            <p>
+              مدة اللعبة:{' '}
+              <span className="font-bold text-slate-700">
+                {result.durationSeconds}
+              </span>{' '}
+              ثانية
+            </p>
+          </div>
         )}
 
         <Link
-          to="/grades"
+          to={returnTo}
           className="mt-7 inline-flex rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
         >
           العودة إلى المنهج
